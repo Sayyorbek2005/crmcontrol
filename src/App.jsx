@@ -6,7 +6,7 @@ import './App.css';
 
 import './BackButton.css';
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { ArrowLeft } from "lucide-react";
 
@@ -84,8 +84,6 @@ import SuperAdminPanel from "./super-admin/SuperAdminPanel";
 
 import TenantWelcome from "./super-admin/TenantWelcome";
 
-
-
 const portalParams = new URLSearchParams(window.location.search);
 
 const tenantId = portalParams.get("tenant") || "";
@@ -95,8 +93,6 @@ const tenantInvite = portalParams.get("invite") || "";
 const isTenantPortal = Boolean(tenantId && tenantInvite);
 
 if (isTenantPortal) activateTenantStorage(tenantId);
-
-
 
 prepareSaleReadyData();
 // ── Placeholder ─────────────────────────────────────
@@ -244,8 +240,6 @@ function renderPage(page, onNavigate, onBack, user, onProfileSaved, posCartProps
 
   }
 
-
-
   switch (page) {
 
     case "dashboard":
@@ -362,8 +356,6 @@ const detailPagePrefixes = ["customer-", "product-", "supplier-", "employee-", "
 
 const browserRouteKey = "__uyMarketCrmRoute";
 
-
-
 function routeFromBrowserState(state) {
 
   const savedRoute = state?.[browserRouteKey];
@@ -384,8 +376,6 @@ function routeFromBrowserState(state) {
 
 }
 
-
-
 function Shell({ onLogout, user, initialPage }) {
 
   useUILanguage();
@@ -394,13 +384,13 @@ function Shell({ onLogout, user, initialPage }) {
 
   const sectionStartPages = { sales: "sales-all", products: "products-all", customers: "customers-all", finance: "finance-revenue" };
 
-  const firstAllowed = () => {
+  const firstAllowed = useCallback(() => {
 
     const section = ACCESS_SECTIONS.find((entry) => canAccess(user, entry.id));
 
     return section ? sectionStartPages[section.id] || section.id : "help";
 
-  };
+  }, [user]);
 
   const [route, setRoute] = useState(
 
@@ -428,8 +418,6 @@ function Shell({ onLogout, user, initialPage }) {
 
   const unread = notifications.filter((n) => !n.read).length;
 
-
-
   useEffect(() => {
 
     if (!routeFromBrowserState(window.history.state)) {
@@ -443,8 +431,6 @@ function Shell({ onLogout, user, initialPage }) {
       );
 
     }
-
-
 
     const handleBrowserNavigation = (event) => {
 
@@ -462,15 +448,11 @@ function Shell({ onLogout, user, initialPage }) {
 
     };
 
-
-
     window.addEventListener("popstate", handleBrowserNavigation);
 
     return () => window.removeEventListener("popstate", handleBrowserNavigation);
 
-  }, [user]);
-
-
+  }, [user, firstAllowed]);
 
   useEffect(() => {
 
@@ -486,9 +468,7 @@ function Shell({ onLogout, user, initialPage }) {
 
     }
 
-  }, [user]);
-
-
+  }, [user, firstAllowed]);
 
   useEffect(() => {
 
@@ -498,8 +478,6 @@ function Shell({ onLogout, user, initialPage }) {
 
   }, [page]);
 
-
-
   const navigate = (nextPage) => {
 
     if (!nextPage) {
@@ -507,8 +485,6 @@ function Shell({ onLogout, user, initialPage }) {
       return;
 
     }
-
-
 
     if (nextPage === "login") {
 
@@ -518,11 +494,7 @@ function Shell({ onLogout, user, initialPage }) {
 
     }
 
-
-
     if (!canAccess(user, nextPage)) return;
-
-
 
     const current = routeRef.current;
 
@@ -552,15 +524,11 @@ function Shell({ onLogout, user, initialPage }) {
 
   };
 
-
-
   const goBack = () => {
 
     if (routeRef.current.history.length > 0) window.history.back();
 
   };
-
-
 
   const hasOwnBackButton = detailPagePrefixes.some((prefix) => page.startsWith(prefix));
 
@@ -577,8 +545,6 @@ function Shell({ onLogout, user, initialPage }) {
     goBack();
 
   };
-
-
 
   return (
 
@@ -614,8 +580,6 @@ function Shell({ onLogout, user, initialPage }) {
 
       />
 
-
-
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
 
         <Topbar onNavigate={navigate} notifCount={unread} user={user} profile={profile} />
@@ -625,8 +589,6 @@ function Shell({ onLogout, user, initialPage }) {
         <main ref={contentRef} className={`flex-1 overflow-y-auto p-6 ${page === "sales-new" ? "app-pos-main" : ""}${page === "ai-chat" ? " ai-chat-shell-scroll" : ""}`}>
 
           <div className={page === "sales-new" ? "app-pos-content" : undefined} style={{ maxWidth: 1400, margin: "0 auto", width: "100%" }}>
-
-
 
             {(history.length > 0 || (page === "sales-new" && posCartOpen)) && !hasOwnBackButton && (
 
@@ -737,8 +699,6 @@ export default function App() {
   const handleLogin = (account) => setUser(account);
 
   const handleLogout = () => setUser(null);
-
-
 
   return (
 
