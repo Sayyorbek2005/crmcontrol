@@ -1,11 +1,12 @@
+import ReceivingCardSelect from "../components/ReceivingCardSelect";
 import { translateText as tx } from "../locales/translateText";
 import { useLanguage as useUILanguage } from "../context/LanguageContext";
 import { useState } from "react";
 import { ShoppingBag, CreditCard, ChevronRight, CheckCircle, X } from "lucide-react";
 import { products as catalogProducts } from "../data/mockData";
-import { startsWithCapital } from './customerDetailHelpers';
 
-export function DebtPaymentModal({ sale, paymentAmount, setPaymentAmount, method, setMethod, cardForm, setCardForm, completed, onSubmit, onClose, dialogRef }) {
+import { formatCurrency, moneyInputValue, toBaseMoney } from "../data/currency";
+export function DebtPaymentModal({ sale, paymentAmount, setPaymentAmount, method, setMethod, selectedCardId, setSelectedCardId, completed, onSubmit, onClose, dialogRef }) {
   useUILanguage();
   const [showProducts, setShowProducts] = useState(true);
   const names = sale.items?.length
@@ -14,10 +15,6 @@ export function DebtPaymentModal({ sale, paymentAmount, setPaymentAmount, method
       .map((id) => catalogProducts.find((product) => product.id === id)?.name)
       .filter(Boolean);
   const amount = Math.min(sale.debtBalance, Number(String(paymentAmount || "").replace(/\D/g, "")) || 0);
-  const updateCard = (field, value) => setCardForm((previous) => ({ ...previous, [field]: value }));
-  const firstNameWarning = cardForm.firstName.trim() && !startsWithCapital(cardForm.firstName);
-  const lastNameWarning = cardForm.lastName.trim() && !startsWithCapital(cardForm.lastName);
-
   return (
     <div className="crm-content-modal">
       <div ref={dialogRef} className="customer-payment-modal slide-up" role="dialog" aria-modal="true" aria-labelledby="customer-payment-title">
@@ -40,9 +37,9 @@ export function DebtPaymentModal({ sale, paymentAmount, setPaymentAmount, method
             </ol>
           )}
           <div className="customer-payment-totals">
-            <div><span>{tx("Jami qarz")}</span><strong>{tx(sale.amount.toLocaleString())}{tx(" so'm")}</strong></div>
-            <div><span>{tx("To'langan")}</span><strong className="is-paid">{tx(Number(sale.paidAmount || 0).toLocaleString())}{tx(" so'm")}</strong></div>
-            <div className="is-remaining"><span>{tx("Qolgan qarz")}</span><strong>{tx(sale.debtBalance.toLocaleString())}{tx(" so'm")}</strong></div>
+            <div><span>{tx("Jami qarz")}</span><strong>{formatCurrency(sale.amount)}</strong></div>
+            <div><span>{tx("To'langan")}</span><strong className="is-paid">{formatCurrency(Number(sale.paidAmount || 0))}</strong></div>
+            <div className="is-remaining"><span>{tx("Qolgan qarz")}</span><strong>{formatCurrency(sale.debtBalance)}</strong></div>
           </div>
         </div>
 
@@ -52,17 +49,17 @@ export function DebtPaymentModal({ sale, paymentAmount, setPaymentAmount, method
             <input
               className="input-base"
               style={{ paddingRight: 54 }}
-              inputMode="numeric"
-              value={paymentAmount ? amount.toLocaleString("en-US") : ""}
-              onChange={(event) => setPaymentAmount(String(Math.min(sale.debtBalance, Number(event.target.value.replace(/\D/g, "")) || 0)))}
+              inputMode="decimal"
+              value={moneyInputValue(paymentAmount, false)}
+              onChange={(event) => setPaymentAmount(String(Math.min(sale.debtBalance, toBaseMoney(event.target.value))))}
               placeholder="0"
               disabled={completed}
             />
-            <span style={{ position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)", fontSize: 13 }}>so'm</span>
+            <span style={{ position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)", fontSize: 13 }}>{tx("so'm")}</span>
           </div>
           <div className="customer-payment-selected">
             <span className="customer-payment-percent-icon">✓</span>
-            <span>{tx("Qabul qilinadigan summa: ")}<strong>{tx(amount.toLocaleString())}{tx(" so'm")}</strong><small>{tx("Qolgan qarz: ")}{tx(Math.max(0, sale.debtBalance - amount).toLocaleString())}{tx(" so'm")}</small></span>
+            <span>{tx("Qabul qilinadigan summa: ")}<strong>{formatCurrency(amount)}</strong><small>{tx("Qolgan qarz: ")}{formatCurrency(Math.max(0, sale.debtBalance - amount))}</small></span>
           </div>
         </div>
 
@@ -75,19 +72,7 @@ export function DebtPaymentModal({ sale, paymentAmount, setPaymentAmount, method
         </div>
 
         {method === "card" && (
-          <div className="customer-payment-card-fields">
-            <strong>{tx("Karta ma'lumotlari")}</strong>
-            <div className="customer-payment-name-row">
-              <label>{tx("Ism")}<input autoComplete="cc-given-name" value={cardForm.firstName} onChange={(event) => updateCard("firstName", event.target.value)} placeholder={tx("Karta egasining ismi")} disabled={completed} aria-invalid={!!firstNameWarning} aria-describedby={firstNameWarning ? "card-first-name-warning" : undefined} />
-                {firstNameWarning && <span id="card-first-name-warning" className="customer-payment-name-warning" role="alert">{tx("Ism bosh harf bilan boshlanishi kerak.")}</span>}
-              </label>
-              <label>{tx("Familiya")}<input autoComplete="cc-family-name" value={cardForm.lastName} onChange={(event) => updateCard("lastName", event.target.value)} placeholder={tx("Familiya")} disabled={completed} aria-invalid={!!lastNameWarning} aria-describedby={lastNameWarning ? "card-last-name-warning" : undefined} />
-                {lastNameWarning && <span id="card-last-name-warning" className="customer-payment-name-warning" role="alert">{tx("Familiya bosh harf bilan boshlanishi kerak.")}</span>}
-              </label>
-            </div>
-            <label>{tx("Karta raqami")}<input inputMode="numeric" autoComplete="cc-number" value={cardForm.number} onChange={(event) => updateCard("number", event.target.value.replace(/\D/g, "").slice(0, 16).replace(/(\d{4})(?=\d)/g, "$1 "))} placeholder={tx("1234 5678 9012 3456")} disabled={completed} /></label>
-            <p>{tx("To'liq karta raqami saqlanmaydi. Bu amal bankdan pul yechmaydi, to'lovni CRMga qayd etadi.")}</p>
-          </div>
+          <ReceivingCardSelect value={selectedCardId} onChange={setSelectedCardId} disabled={completed} />
         )}
 
         <button type="button" className={`customer-payment-submit ${completed ? "is-complete" : ""}`} onClick={onSubmit} disabled={completed || amount <= 0}>

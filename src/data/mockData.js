@@ -598,7 +598,7 @@ export const notifications = [
     id: 7,
     type: "info",
     title: "Tizim yangilandi",
-    description: "UyMarket CRM v2.4.1 muvaffaqiyatli o'rnatildi",
+    description: "CRM tizimi v2.4.1 muvaffaqiyatli o'rnatildi",
     time: "1 kun oldin",
     read: true,
   },

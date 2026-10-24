@@ -1,4 +1,6 @@
+import { reportDay, filterReportPeriod } from "../data/reportPeriod";
 import { createReportPdf } from "../locales/reportPdf";
+import { useTenantCompanyName } from "../data/tenantBrand";
 import { translateText as tx } from "../locales/translateText";
 import { useLanguage as useUILanguage } from "../context/LanguageContext";
 import './Reports.css';
@@ -25,6 +27,7 @@ import {
 } from "recharts";
 import { readFinanceOperations } from "../data/financeStore";
 import { readDebtPayments, readPosSales, withDebtBalance } from "../data/debtPayments";
+import { formatCurrency } from "../data/currency";
 
 const readBusinessList = (key) => {
   try {
@@ -35,10 +38,7 @@ const readBusinessList = (key) => {
   }
 };
 
-const reportDate = (value) => {
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? new Date().toISOString().slice(0, 10) : date.toISOString().slice(0, 10);
-};
+const reportDate = reportDay;
 
 const fmt = (n) => (n / 1000000).toFixed(1) + " mln";
 
@@ -112,16 +112,13 @@ const reportTypes = [
 ];
 
 // Hafta, Oy, Chorak, Yil bo'yicha ma'lumotlarni filtrlash mantiqi
-const filterDataByRange = (data, range) => {
-  if (!data || !data.length) return [];
-  const days = range === "week" ? 7 : range === "quarter" ? 90 : range === "year" ? 365 : 30;
-  return data.slice(-days);
-};
+const filterDataByRange = filterReportPeriod;
 
 export default function Reports() {
   useUILanguage();
+  const companyName = useTenantCompanyName();
   const [selectedReport, setSelectedReport] = useState("Sotuv hisoboti");
-  const [dateRange, setDateRange] = useState("month");
+  const [dateRange, setDateRange] = useState("today");
   const monthlyData = useMemo(() => {
     const payments = readDebtPayments();
     const sales = readPosSales().map((sale) => withDebtBalance(sale, payments));
@@ -134,6 +131,7 @@ export default function Reports() {
     const grouped = {};
     const add = (date, key, amount) => {
       const day = reportDate(date);
+      if (!day) return;
       if (!grouped[day]) grouped[day] = { date: day, revenue: 0, profit: 0, expenses: 0 };
       grouped[day][key] += Number(amount || 0);
     };
@@ -168,17 +166,17 @@ export default function Reports() {
     return [
       {
         label: `Umumiy (${currentReportObj.primaryName})`,
-        value: `${totalRev.toLocaleString("ru-RU")} so'm`,
+        value: formatCurrency(totalRev),
         change: "0%",
       },
       {
         label: `O'rtacha ko'rsatkich`,
-        value: `${avgRev.toLocaleString("ru-RU")} so'm`,
+        value: formatCurrency(avgRev),
         change: "0%",
       },
       {
         label: "Eng yuqori ko'rsatkich",
-        value: top ? `${Number(top[currentReportObj.primaryKey] || 0).toLocaleString("ru-RU")} so'm` : "—",
+        value: top ? formatCurrency(Number(top[currentReportObj.primaryKey] || 0)) : "—",
         change: top ? top.date : "Ma'lumot yo'q",
       },
     ];
@@ -186,10 +184,12 @@ export default function Reports() {
 
   // Eksport funksiyalari
   const mKeys = chartData && chartData.length ? Object.keys(chartData[0]) : [];
-  const fmtVal = (v) => (typeof v === "number" ? v.toLocaleString() : tx(String(v)));
+  const fmtVal = (v) => (typeof v === "number" ? formatCurrency(v) : tx(String(v)));
   const columnLabel = key => tx({ date: "Sana", revenue: "Daromad", profit: "Foyda", expenses: "Xarajatlar" }[key] || key);
   const periodLabel =
-    dateRange === "week"
+    dateRange === "today"
+      ? "Bugun"
+      : dateRange === "week"
       ? "Hafta"
       : dateRange === "month"
       ? "Oy"
@@ -213,22 +213,23 @@ export default function Reports() {
   };
 
   const handlePrint = () => {
-    const head = mKeys.map((k) => "<th>" + columnLabel(k) + "</th>").join("");
+    const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char]));
+    const head = mKeys.map((k) => "<th>" + esc(columnLabel(k)) + "</th>").join("");
     const body = chartData
       .map(
         (m) =>
           "<tr>" +
-          mKeys.map((k) => "<td>" + fmtVal(m[k]) + "</td>").join("") +
+          mKeys.map((k) => "<td>" + esc(fmtVal(m[k])) + "</td>").join("") +
           "</tr>"
       )
       .join("");
     const html =
       "<html><head><title>" +
-      tx(selectedReport) +
-      "</title><style>body{font-family:Arial;color:#111;padding:24px}h1{font-size:18px;margin:0 0 4px}p{color:#555;font-size:12px}table{width:100%;border-collapse:collapse;margin-top:14px}th,td{border:1px solid #ccc;padding:8px;text-align:left;font-size:12px}th{background:#f3f4f6}</style></head><body><h1>UyMarket — " +
-      tx(selectedReport) +
-      "</h1><p>" + tx("Davr:") + " " +
-      tx(periodLabel) +
+      esc(tx(selectedReport)) +
+      "</title><style>body{font-family:Arial;color:#111;padding:24px}h1{font-size:18px;margin:0 0 4px}p{color:#555;font-size:12px}table{width:100%;border-collapse:collapse;margin-top:14px}th,td{border:1px solid #ccc;padding:8px;text-align:left;font-size:12px}th{background:#f3f4f6}</style></head><body><h1>" + esc(companyName) + " — " +
+      esc(tx(selectedReport)) +
+      "</h1><p>" + esc(tx("Davr:")) + " " +
+      esc(tx(periodLabel)) +
       "</p><table><tr>" +
       head +
       "</tr>" +
@@ -245,7 +246,7 @@ export default function Reports() {
 
   const handlePdf = () => {
     const lines = [
-      { t: "UyMarket — " + tx(selectedReport), s: 15, b: true },
+      { t: companyName + " — " + tx(selectedReport), s: 15, b: true },
       { t: tx("Davr:") + " " + tx(periodLabel), s: 10 },
       { t: mKeys.map(columnLabel).join("     "), s: 10, b: true },
       ...chartData.map(row => ({ t: mKeys.map(key => fmtVal(row[key])).join("     "), s: 10 })),
@@ -314,7 +315,7 @@ export default function Reports() {
       </div>
 
       {/* Hisobot turlari kartochkalari (Bosganda aktiv bo'ladi) */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-3 report-type-grid gap-3">
         {reportTypes.map((r) => (
           <button
             key={r.label}
@@ -409,6 +410,7 @@ export default function Reports() {
             }}
           >
             {[
+              { key: "today", label: "Bugun" },
               { key: "week", label: "Hafta" },
               { key: "month", label: "Oy" },
               { key: "quarter", label: "Chorak" },
@@ -493,7 +495,7 @@ export default function Reports() {
             <YAxis
               domain={[0, 160000000]}
               ticks={[0, 35000000, 70000000, 105000000, 140000000]}
-              tickFormatter={(v) => tx(fmt(v))}
+              tickFormatter={(v) => formatCurrency(v)}
               tick={{
                 fontSize: 11,
                 fill: "var(--text-faint)",
@@ -503,7 +505,7 @@ export default function Reports() {
               width={65}
             />
             <Tooltip
-              formatter={(v, name) => [tx(fmt(Number(v))), tx(name)]} labelFormatter={(value) => tx(value)}
+              formatter={(v, name) => [formatCurrency(Number(v)), tx(name)]} labelFormatter={(value) => tx(value)}
               contentStyle={{
                 background: "var(--text-primary)",
                 border: "none",

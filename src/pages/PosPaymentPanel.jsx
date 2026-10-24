@@ -1,10 +1,12 @@
+import ReceivingCardSelect from "../components/ReceivingCardSelect";
 import { translateText as tx } from "../locales/translateText";
 import { useLanguage as useUILanguage } from "../context/LanguageContext";
 import React, { useState } from "react";
 import { FiCheckCircle, FiShoppingCart, FiX, FiCreditCard, FiCalendar } from "react-icons/fi";
-import { startsWithCapital, formatDateInputValue } from './posHelpers';
+import { formatDateInputValue } from './posHelpers';
 
-export function PaymentSuccessAnimation({ amount, remainingDebt }) {
+import { formatCurrency, moneyInputValue, toBaseMoney } from "../data/currency";
+export function PaymentSuccessAnimation({ amount, remainingDebt, title = "To'lov qabul qilindi" }) {
   useUILanguage();
   return (
     <div className="pos-faceid-backdrop" role="dialog" aria-modal="true" aria-label={tx("To'lov tasdiqlanmoqda")}>
@@ -17,9 +19,9 @@ export function PaymentSuccessAnimation({ amount, remainingDebt }) {
           </svg>
         </div>
         <div className="pos-faceid-copy">
-          <strong>{tx("To'lov qabul qilindi")}</strong>
-          <span>{tx(amount.toLocaleString())}{tx(" so'm")}</span>
-          {remainingDebt > 0 && <small>{tx("Qolgan qarz: ")}{tx(remainingDebt.toLocaleString())}{tx(" so'm")}</small>}
+          <strong>{tx(title)}</strong>
+          <span>{formatCurrency(amount)}</span>
+          {remainingDebt > 0 && <small>{tx("Qolgan qarz: ")}{formatCurrency(remainingDebt)}</small>}
         </div>
       </div>
     </div>
@@ -33,8 +35,7 @@ export function PosPaymentPanel({
   setPaymentAmount,
   method,
   setMethod,
-  cardForm,
-  setCardForm,
+  selectedCardId, setSelectedCardId,
   debtDueDate,
   setDebtDueDate,
   error,
@@ -48,16 +49,9 @@ export function PosPaymentPanel({
   const [showProducts, setShowProducts] = useState(true);
   const saleTotal = Math.round(total);
   const enteredAmount = paymentAmount === ""
-    ? saleTotal
+    ? 0
     : Math.min(saleTotal, Math.max(0, Number(paymentAmount) || 0));
   const remaining = Math.max(0, saleTotal - (completed ? paidAmount : enteredAmount));
-  const firstNameWarning = cardForm.firstName.trim() && !startsWithCapital(cardForm.firstName);
-  const lastNameWarning = cardForm.lastName.trim() && !startsWithCapital(cardForm.lastName);
-  const updateCard = (field, value) => {
-    setCardForm((current) => ({ ...current, [field]: value }));
-    setError("");
-  };
-
   return (
     <section className="pos-cart-section pos-order-panel pos-payment-panel" aria-label={tx("To'lovni qabul qilish")}>
       <div className="pos-payment-header">
@@ -80,15 +74,15 @@ export function PosPaymentPanel({
                   <span className="pos-payment-product-index">{tx(index + 1)}.</span>
                   <span>{item.name}</span>
                   <span>{tx(item.qty)}{tx(" dona")}</span>
-                  <strong>{tx((item.price * item.qty).toLocaleString())}{tx(" so'm")}</strong>
+                  <strong>{formatCurrency(item.price * item.qty)}</strong>
                 </li>
               ))}
             </ol>
           )}
           <div className="pos-payment-totals">
-            <div><span>{tx("Jami to'lov")}</span><strong>{tx(saleTotal.toLocaleString())}{tx(" so'm")}</strong></div>
-            <div><span>{tx("To'langan")}</span><strong className="is-paid">{tx((completed ? paidAmount : enteredAmount).toLocaleString())}{tx(" so'm")}</strong></div>
-            <div className="is-remaining"><span>{tx("Qolgan qarz")}</span><strong>{tx(remaining.toLocaleString())}{tx(" so'm")}</strong></div>
+            <div><span>{tx("Jami to'lov")}</span><strong>{formatCurrency(saleTotal)}</strong></div>
+            <div><span>{tx("To'landi")}</span><strong className="is-paid">{formatCurrency(completed ? paidAmount : enteredAmount)}</strong></div>
+            <div className="is-remaining"><span>{tx("Qolgan qarz")}</span><strong>{formatCurrency(remaining)}</strong></div>
           </div>
         </div>
 
@@ -97,12 +91,12 @@ export function PosPaymentPanel({
           <label className="pos-payment-amount-input">
             <input
               type="text"
-              inputMode="numeric"
-              value={paymentAmount ? Number(paymentAmount).toLocaleString("uz-UZ") : ""}
+              inputMode="decimal"
+              value={moneyInputValue(paymentAmount, true)}
               onChange={(event) => {
-                const digits = event.target.value.replace(/\D/g, "");
-                if (digits === "") setPaymentAmount("");
-                else setPaymentAmount(String(Math.min(saleTotal, Math.max(0, Number(digits)))));
+                const entered = event.target.value;
+                if (entered === "") setPaymentAmount("");
+                else setPaymentAmount(String(Math.min(saleTotal, Math.max(0, toBaseMoney(entered)))));
                 setError("");
               }}
               placeholder={tx("Oldindan to'lov (ixtiyoriy)")}
@@ -113,9 +107,9 @@ export function PosPaymentPanel({
           </label>
           <div className="pos-payment-calculation">
             <span>{tx("To'lovdan keyingi qarz")}</span>
-            <strong>{tx(remaining.toLocaleString())}{tx(" so'm")}</strong>
+            <strong>{formatCurrency(remaining)}</strong>
           </div>
-          <small>{tx("Bo'sh qoldirilsa, buyurtma to'liq to'langan deb saqlanadi. Qisman to'lov kiritsangiz, qolgani qarzga yoziladi.")}</small>
+          <small>{tx("Bo'sh yoki 0 qoldirilsa, summa qarzga yoziladi. Qisman to'lov kiritsangiz, to'langan summa qarzdan ayriladi.")}</small>
         </div>
 
         <div className="pos-payment-fieldset pos-payment-due-date">
@@ -146,20 +140,7 @@ export function PosPaymentPanel({
         </div>
 
         {method === "card" && (
-          <div className="pos-payment-card-fields">
-            <strong>{tx("Karta ma'lumotlari")}</strong>
-            <label>{tx("Karta raqami")}<input inputMode="numeric" autoComplete="off" value={cardForm.number} onChange={(event) => updateCard("number", event.target.value.replace(/\D/g, "").slice(0, 16).replace(/(\d{4})(?=\d)/g, "$1 "))} placeholder={tx("1234 5678 9012 3456")} disabled={completed} />
-            </label>
-            <div className="pos-payment-name-row">
-              <label>{tx("Ism")}<input value={cardForm.firstName} onChange={(event) => updateCard("firstName", event.target.value)} placeholder={tx("Karta egasining ismi")} disabled={completed} aria-invalid={!!firstNameWarning} />
-                {firstNameWarning && <span role="alert">{tx("Ism bosh harf bilan boshlanishi kerak.")}</span>}
-              </label>
-              <label>{tx("Familiya")}<input value={cardForm.lastName} onChange={(event) => updateCard("lastName", event.target.value)} placeholder={tx("Familiya")} disabled={completed} aria-invalid={!!lastNameWarning} />
-                {lastNameWarning && <span role="alert">{tx("Familiya bosh harf bilan boshlanishi kerak.")}</span>}
-              </label>
-            </div>
-            <p>{tx("Bu yerda bankdan pul yechilmaydi; to'lov faqat CRMga qayd etiladi. Karta raqami saqlanmaydi.")}</p>
-          </div>
+          <ReceivingCardSelect value={selectedCardId} onChange={setSelectedCardId} disabled={completed} />
         )}
         {error && <p className="pos-payment-error" role="alert">{tx(error)}</p>}
       </div>

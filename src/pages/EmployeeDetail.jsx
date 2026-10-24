@@ -14,22 +14,16 @@ import {
   X,
   Save,
   UserCog,
-  CheckCircle,
   Clock,
 } from "lucide-react";
 import { employees } from "../data/mockData";
 import { readEmployees, saveEmployees } from "../data/employeeStore";
 import { ACCESS_SECTIONS, createCredentials, getDirector } from "../data/accessStore";
+import { readDebtPayments, readPosSales, withDebtBalance } from "../data/debtPayments";
 import { dateKey, formatSalaryPeriod, monthKey, salaryMonthRows } from "../data/salaryHistory";
 import { useToast } from "../context/ToastContext";
 
-const salesLog = [
-  { id: "S-2847", customer: "Aziza Karimova", amount: 485000, payment: "Naqd", date: "08 Sep 2026", status: "paid" },
-  { id: "S-2841", customer: "Eldor Rahimov", amount: 890000, payment: "Karta", date: "07 Sep 2026", status: "paid" },
-  { id: "S-2836", customer: "Feruza Nazarova", amount: 640000, payment: "Click", date: "06 Sep 2026", status: "partial" },
-  { id: "S-2829", customer: "Bobur Toshmatov", amount: 1250000, payment: "Naqd", date: "05 Sep 2026", status: "paid" },
-];
-
+import { formatCurrency, moneyInputValue, toBaseMoney } from "../data/currency";
 const roleColors = {
   Admin: { bg: "var(--brand-light)", color: "var(--brand)" },
   Manager: { bg: "var(--violet-light)", color: "var(--violet)" },
@@ -39,6 +33,34 @@ const roleColors = {
 const payStatus = {
   paid: { label: "To'landi", bg: "var(--success-light)", color: "var(--success)" },
   partial: { label: "Qisman", bg: "var(--warning-light)", color: "var(--warning)" },
+  debt: { label: "Qarz", bg: "var(--danger-light)", color: "var(--danger)" },
+};
+const saleDateTime = (value) => {
+  if (!value || Number.isNaN(new Date(value).getTime())) return "Sana saqlanmagan";
+  return new Date(value).toLocaleString("uz-UZ", { timeZone: "Asia/Tashkent", day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: false });
+};
+const employeeRegisteredDate = (value) => value && !Number.isNaN(new Date(value).getTime())
+  ? new Date(value).toLocaleDateString("uz-UZ", { timeZone: "Asia/Tashkent", day: "2-digit", month: "short", year: "numeric" })
+  : "Sana saqlanmagan";
+const readEmployeeSales = (employeeId) => {
+  const payments = readDebtPayments().map((payment) => ({ ...payment, saleId: String(payment.saleId) }));
+  let additionalSales = [];
+  try {
+    const saved = JSON.parse(localStorage.getItem("crm_additional_pos_sales") || "[]");
+    if (Array.isArray(saved)) additionalSales = saved.map((sale) => ({
+      ...sale,
+      id: String(sale.id ?? sale.receiptNumber ?? ""),
+      amount: Number(sale.amount ?? sale.total ?? 0),
+      customer: sale.customer || sale.customerName || "Noma'lum mijoz",
+      products: Number(sale.products ?? sale.items?.length ?? 0),
+      payment: sale.payment || sale.paymentMethod || "Naqd",
+      createdAt: sale.createdAt || sale.date || "",
+    }));
+  } catch { /* Ignore unreadable secondary POS records. */ }
+  return [...readPosSales(), ...additionalSales]
+    .map((sale) => withDebtBalance(sale, payments))
+    .filter((sale) => String(sale.employeeId ?? sale.cashierEmployeeId ?? sale.sellerEmployeeId ?? "") === String(employeeId))
+    .sort((left, right) => new Date(right.createdAt || right.date).getTime() - new Date(left.createdAt || left.date).getTime());
 };
 
 export default function EmployeeDetail({ employeeId, onBack }) {
@@ -51,11 +73,20 @@ export default function EmployeeDetail({ employeeId, onBack }) {
     catch { return employees.find((e) => e.id === employeeId) || employees[0]; }
   });
   const [data, setData] = useState(initial);
+  const [employeeSales, setEmployeeSales] = useState(() => readEmployeeSales(employeeId));
+  useEffect(() => {
+    const refresh = () => setEmployeeSales(readEmployeeSales(employeeId));
+    refresh();
+    const timer = window.setInterval(refresh, 1500);
+    window.addEventListener("storage", refresh);
+    return () => { window.clearInterval(timer); window.removeEventListener("storage", refresh); };
+  }, [employeeId]);
   const [tab, setTab] = useState("sales");
   const [showEdit, setShowEdit] = useState(false);
   const [showDelete, setShowDelete] = useState(false);
   const [salaryForm, setSalaryForm] = useState({ period: monthKey(), paidAt: dateKey(), amount: "" });
   const [salaryError, setSalaryError] = useState("");
+  const [salaryEditing, setSalaryEditing] = useState(false);
 
   useEffect(() => {
     if (!showEdit && !showDelete) return;
@@ -72,6 +103,7 @@ export default function EmployeeDetail({ employeeId, onBack }) {
   const [form, setForm] = useState({ name: initial.name, role: initial.role, phone: initial.phone, status: initial.status, monthlySalary: initial.monthlySalary ?? "", salaryDueDay: initial.salaryDueDay ?? "", salaryStartMonth: initial.salaryStartMonth || monthKey(), login: initial.login || "", password: "", permissions: initial.permissions || [] });
 
   const rc = roleColors[data.role] || { bg: "var(--surface-2)", color: "var(--text-muted)" };
+  const employeeRevenue = employeeSales.reduce((sum, sale) => sum + Number(sale.amount || 0), 0);
 
   const saveEdit = async () => {
     const name = form.name.trim();
@@ -231,7 +263,7 @@ export default function EmployeeDetail({ employeeId, onBack }) {
               <div className="flex items-center gap-3 text-sm" style={{ color: "var(--text-secondary)" }}>
                 <span className="p-2 rounded-lg" style={{ background: "var(--surface-2)" }}>
                   <Calendar size={13} style={{ color: "var(--text-muted)" }} />
-                </span>{tx("Ro'yxatdan: 01 Yan 2026")}</div>
+                </span>{tx("Ro'yxatdan:")} {tx(employeeRegisteredDate(data.createdAt))}</div>
             </div>
 
             <div className="grid grid-cols-2 gap-3 mt-5">
@@ -248,9 +280,9 @@ export default function EmployeeDetail({ employeeId, onBack }) {
 
           <div className="grid grid-cols-2 gap-3">
             {[
-              { label: "Oylik maosh", value: data.monthlySalary == null ? "Tayinlanmagan" : Number(data.monthlySalary).toLocaleString("uz-UZ") + " so'm", icon: UserCog, color: "var(--brand)", bg: "var(--brand-light)" },
-              { label: "Sotuvlar", value: data.sales > 0 ? data.sales + " ta" : "—", icon: ShoppingCart, color: "var(--violet)", bg: "var(--violet-light)" },
-              { label: "Daromad", value: data.revenue > 0 ? (data.revenue / 1000000).toFixed(1) + " mln" : "—", icon: TrendingUp, color: "var(--success)", bg: "var(--success-light)" },
+              { label: "Oylik maosh", value: data.monthlySalary == null ? "Tayinlanmagan" : formatCurrency(data.monthlySalary), icon: UserCog, color: "var(--brand)", bg: "var(--brand-light)" },
+              { label: "Sotuvlar", value: employeeSales.length > 0 ? employeeSales.length + " ta" : "0 ta", icon: ShoppingCart, color: "var(--violet)", bg: "var(--violet-light)" },
+              { label: "Daromad", value: employeeRevenue > 0 ? (employeeRevenue / 1000000).toFixed(1) + " mln" : "0 so'm", icon: TrendingUp, color: "var(--success)", bg: "var(--success-light)" },
               { label: "Holat", value: data.status === "active" ? "Faol" : "Nofaol", icon: UserCog, color: data.status === "active" ? "var(--success)" : "var(--text-muted)", bg: data.status === "active" ? "var(--success-light)" : "var(--surface-2)" },
               { label: "Faollik", value: data.lastActive, icon: Clock, color: "var(--brand)", bg: "var(--brand-light)" },
             ].map((c) => (
@@ -287,49 +319,47 @@ export default function EmployeeDetail({ employeeId, onBack }) {
             <table className="w-full">
               <thead>
                 <tr style={{ background: "var(--surface-2)" }}>
-                  {["ID", "Mijoz", "Summa", "To'lov", "Sana", "Holat"].map((h) => (
+                  {["ID", "Mijoz", "Mahsulotlar", "Summa", "To'lov", "Sana", "Holat"].map((h) => (
                     <th key={h} className="text-left px-5 py-3 text-xs font-semibold" style={{ color: "var(--text-faint)" }}>{tx(h)}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {salesLog.map((o) => {
+                {employeeSales.map((o) => {
                   const ps = payStatus[o.status] || payStatus.paid;
                   return (
                     <tr key={o.id} className="border-t table-row-hover" style={{ borderColor: "var(--border-subtle)" }}>
                       <td className="px-5 py-3 text-sm font-medium" style={{ color: "var(--text-primary)" }}>{o.id}</td>
                       <td className="px-5 py-3 text-sm" style={{ color: "var(--text-secondary)" }}>{o.customer}</td>
-                      <td className="px-5 py-3 text-sm font-semibold" style={{ color: "var(--text-primary)" }}>{tx(o.amount.toLocaleString())}{tx(" so'm")}</td>
+                      <td className="px-5 py-3 text-sm" style={{ color: "var(--text-secondary)" }}>{(o.items || []).map((item) => `${item.name || "Mahsulot"} × ${item.qty || item.quantity || 1}`).join(", ") || `${o.products || 0} xil mahsulot`}</td>
+                      <td className="px-5 py-3 text-sm font-semibold" style={{ color: "var(--text-primary)" }}>{formatCurrency(o.amount)}</td>
                       <td className="px-5 py-3 text-sm" style={{ color: "var(--text-secondary)" }}>{tx(o.payment)}</td>
-                      <td className="px-5 py-3 text-xs" style={{ color: "var(--text-faint)" }}>{tx(o.date)}</td>
+                      <td className="px-5 py-3 text-xs" style={{ color: "var(--text-faint)" }}>{saleDateTime(o.createdAt || o.date)}</td>
                       <td className="px-5 py-3">
                         <span className="px-3 py-1 rounded-full text-xs font-semibold" style={{ background: ps.bg, color: ps.color }}>{tx(ps.label)}</span>
                       </td>
                     </tr>
                   );
                 })}
+                {employeeSales.length === 0 && <tr><td colSpan={7} className="p-10 text-center text-sm" style={{ color: "var(--text-muted)" }}>{tx("Bu xodim hali sotuv qilmagan")}</td></tr>}
               </tbody>
             </table>
           )}
 
           {tab === "activity" && (
             <div className="p-5 space-y-4">
-              {[
-                { t: "Yangi sotuv — 485 000 so'm", time: "08 Sep 2026, 14:22", icon: ShoppingCart, color: "var(--brand)" },
-                { t: "Kassani yopdi — 5 230 000 so'm", time: "07 Sep 2026, 22:10", icon: CheckCircle, color: "var(--success)" },
-                { t: "Tizimga kirdi", time: "07 Sep 2026, 08:55", icon: UserCog, color: "var(--violet)" },
-                { t: "Profil yangilandi", time: "01 Sep 2026, 11:00", icon: Edit2, color: "var(--text-muted)" },
-              ].map((a, i) => (
-                <div key={i} className="flex items-start gap-3">
+              {employeeSales.map((sale) => (
+                <div key={sale.id} className="flex items-start gap-3">
                   <div className="p-2 rounded-xl shrink-0" style={{ background: "var(--surface-2)" }}>
-                    <a.icon size={14} style={{ color: a.color }} />
+                    <ShoppingCart size={14} style={{ color: "var(--brand)" }} />
                   </div>
                   <div>
-                    <div className="text-sm" style={{ color: "var(--text-primary)" }}>{tx(a.t)}</div>
-                    <div className="text-xs mt-1" style={{ color: "var(--text-faint)" }}>{tx(a.time)}</div>
+                    <div className="text-sm" style={{ color: "var(--text-primary)" }}>{tx("Yangi sotuv")} — {formatCurrency(sale.amount)} · {tx(sale.customer)}</div>
+                    <div className="text-xs mt-1" style={{ color: "var(--text-faint)" }}>{saleDateTime(sale.createdAt || sale.date)} · {sale.displayId || sale.id}</div>
                   </div>
                 </div>
               ))}
+              {employeeSales.length === 0 && <p className="py-10 text-center text-sm" style={{ color: "var(--text-muted)" }}>{tx("Hozircha xodim faoliyati qayd etilmagan")}</p>}
             </div>
           )}
 
@@ -356,7 +386,7 @@ export default function EmployeeDetail({ employeeId, onBack }) {
                     </label>
                     <label className="text-xs font-semibold" style={{ color: "var(--text-secondary)" }}>{tx("To'langan sana")}<input className="input-base mt-1" type="date" value={salaryForm.paidAt} max={dateKey()} onChange={(event) => setSalaryForm({ ...salaryForm, paidAt: event.target.value })} required />
                     </label>
-                    <label className="text-xs font-semibold" style={{ color: "var(--text-secondary)" }}>{tx("Summa (so'm)")}<input className="input-base mt-1" type="number" min="1" step="1" inputMode="numeric" value={salaryForm.amount} onChange={(event) => setSalaryForm({ ...salaryForm, amount: event.target.value })} required />
+                    <label className="text-xs font-semibold" style={{ color: "var(--text-secondary)" }}>{tx("Summa (so'm)")}<input className="input-base mt-1" type="number" min="1" step="any" inputMode="decimal" value={moneyInputValue(salaryForm.amount, false)} onChange={(event) => setSalaryForm({ ...salaryForm, amount: String(toBaseMoney(event.target.value)) })} required />
                     </label>
                   </div>
                   {salaryError && <p role="alert" className="text-xs" style={{ color: "var(--danger)" }}>{tx(salaryError)}</p>}
@@ -365,7 +395,28 @@ export default function EmployeeDetail({ employeeId, onBack }) {
               )}
 
               {salaryRows.length === 0 ? (
-                <p className="text-sm" style={{ color: "var(--text-muted)" }}>{tx("Hozircha oylik tarixi yo'q.")}</p>
+                <div className="p-4 rounded-2xl space-y-4" style={{ border: "1px solid var(--border)", background: "var(--surface)" }}>
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <div className="font-semibold" style={{ color: "var(--text-primary)" }}>{tx("Oylik tarixi namunasi")}</div>
+                      <div className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>{tx("Bu namuna, haqiqiy to'lov yozuvi emas.")}</div>
+                    </div>
+                    <span className="px-3 py-1 rounded-full text-xs font-semibold" style={{ color: "var(--brand)", background: "var(--brand-light)" }}>{tx("NAMUNA")}</span>
+                  </div>
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="font-semibold" style={{ color: "var(--text-primary)" }}>{tx(formatSalaryPeriod(monthKey()))}</div>
+                      <div className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>{tx("Har oyning 5-kuni")}</div>
+                    </div>
+                    <span className="px-3 py-1 rounded-full text-xs font-semibold" style={{ color: "var(--warning)", background: "var(--warning-light)" }}>{tx("Qisman to'langan")}</span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
+                    <div className="p-3 rounded-xl" style={{ background: "var(--surface-2)" }}><div className="text-xs" style={{ color: "var(--text-muted)" }}>{tx("Oylik")}</div><strong>{formatCurrency(5000000)}</strong></div>
+                    <div className="p-3 rounded-xl" style={{ background: "var(--success-light)" }}><div className="text-xs" style={{ color: "var(--text-muted)" }}>{tx("To'langan")}</div><strong style={{ color: "var(--success)" }}>{formatCurrency(2000000)}</strong></div>
+                    <div className="p-3 rounded-xl" style={{ background: "var(--danger-light)" }}><div className="text-xs" style={{ color: "var(--text-muted)" }}>{tx("Qolgan")}</div><strong style={{ color: "var(--danger)" }}>{formatCurrency(3000000)}</strong></div>
+                  </div>
+                  <div className="text-xs" style={{ color: "var(--text-muted)" }}>{tx("Misol: 2,000,000 so'm 10-kuni to'langan. Haqiqiy hisob uchun tahrirlash oynasida oylik va to'lov kunini belgilang.")}</div>
+                </div>
               ) : salaryRows.map((row) => {
                 const status = row.remaining === 0 && row.expected > 0
                   ? row.latePaidDays > 0 ? `${row.latePaidDays} kun kech to'langan` : "To'liq to'langan"
@@ -382,14 +433,14 @@ export default function EmployeeDetail({ employeeId, onBack }) {
                       <span className="px-3 py-1 rounded-full text-xs font-semibold" style={{ color: delayed ? "var(--danger)" : row.remaining === 0 ? "var(--success)" : "var(--text-muted)", background: delayed ? "var(--danger-light)" : row.remaining === 0 ? "var(--success-light)" : "var(--surface-2)" }}>{tx(status)}</span>
                     </div>
                     <div className="grid grid-cols-3 gap-3 mt-4 text-sm">
-                      <div><div className="text-xs" style={{ color: "var(--text-muted)" }}>{tx("Oylik")}</div><strong>{tx(row.expected.toLocaleString("uz-UZ"))}{tx(" so'm")}</strong></div>
-                      <div><div className="text-xs" style={{ color: "var(--text-muted)" }}>{tx("To'langan")}</div><strong style={{ color: "var(--success)" }}>{tx(row.paid.toLocaleString("uz-UZ"))}{tx(" so'm")}</strong></div>
-                      <div><div className="text-xs" style={{ color: "var(--text-muted)" }}>{tx("Qolgan")}</div><strong style={{ color: row.remaining > 0 ? "var(--danger)" : "var(--text-primary)" }}>{tx(row.remaining.toLocaleString("uz-UZ"))}{tx(" so'm")}</strong></div>
+                      <div><div className="text-xs" style={{ color: "var(--text-muted)" }}>{tx("Oylik")}</div><strong>{formatCurrency(row.expected)}</strong></div>
+                      <div><div className="text-xs" style={{ color: "var(--text-muted)" }}>{tx("To'langan")}</div><strong style={{ color: "var(--success)" }}>{formatCurrency(row.paid)}</strong></div>
+                      <div><div className="text-xs" style={{ color: "var(--text-muted)" }}>{tx("Qolgan")}</div><strong style={{ color: row.remaining > 0 ? "var(--danger)" : "var(--text-primary)" }}>{formatCurrency(row.remaining)}</strong></div>
                     </div>
                     <div className="mt-3 pt-3 space-y-2" style={{ borderTop: "1px solid var(--border-subtle)" }}>
                       {row.entries.length ? row.entries.map((payment) => (
                         <div key={payment.id} className="flex justify-between text-xs" style={{ color: "var(--text-secondary)" }}>
-                          <span>{tx("Olingan: ")}{tx(payment.paidAt)}</span><strong>{tx(Number(payment.amount).toLocaleString("uz-UZ"))}{tx(" so'm")}</strong>
+                          <span>{tx("Olingan: ")}{tx(payment.paidAt)}</span><strong>{formatCurrency(Number(payment.amount))}</strong>
                         </div>
                       )) : <span className="text-xs" style={{ color: "var(--text-faint)" }}>{tx("To'lov qayd etilmagan")}</span>}
                     </div>
@@ -461,7 +512,7 @@ export default function EmployeeDetail({ employeeId, onBack }) {
               <div>
                 <label htmlFor="employee-monthly-salary" className="block text-xs font-semibold mb-2" style={{ color: "var(--text-secondary)" }}>{tx("Oylik maosh")}</label>
                 <div style={{ position: "relative" }}>
-                  <input id="employee-monthly-salary" className="input-base" type="number" min="0" step="1" inputMode="numeric" placeholder={tx("Masalan: 3000000")} value={form.monthlySalary} onChange={(e) => setForm({ ...form, monthlySalary: e.target.value })} style={{ paddingRight: 60 }} />
+                  <input id="employee-monthly-salary" className="input-base" type="text" inputMode="numeric" placeholder={tx("Masalan: 3,000,000")} value={moneyInputValue(form.monthlySalary, !salaryEditing)} onFocus={() => setSalaryEditing(true)} onBlur={() => setSalaryEditing(false)} onChange={(e) => setForm({ ...form, monthlySalary: String(toBaseMoney(e.target.value)) })} style={{ paddingRight: 60 }} />
                   <span style={{ position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)", fontSize: 13 }}>{tx("so'm")}</span>
                 </div>
               </div>

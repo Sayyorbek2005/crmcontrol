@@ -1,8 +1,12 @@
 import { translateText as tx } from "../locales/translateText";
 import { useLanguage as useUILanguage } from "../context/LanguageContext";
-import { useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
+import { prefersReducedMotion } from "../utils/motion";
+
+// Yopilish animatsiyasi davomiyligi (src/styles/motion.css dagi m-dialog-out bilan mos).
+const MODAL_EXIT_MS = 170;
 
 export default function Modal({
   open,
@@ -15,6 +19,18 @@ export default function Modal({
   contentOnly = false,
 }) {
   useUILanguage();
+  // Yopilganda oyna teskari animatsiya tugaguncha ko'rinib turadi; tarkibi oxirgi holatda "muzlatiladi",
+  // shunda sahifa tanlangan ma'lumotni tozalab yuborsa ham oyna bo'sh qolmaydi.
+  const [rendered, setRendered] = useState(open);
+  const frozen = useRef({ title, subtitle, children, Icon });
+  if (open) frozen.current = { title, subtitle, children, Icon };
+  useEffect(() => {
+    if (open) { setRendered(true); return undefined; }
+    if (!rendered) return undefined;
+    const timer = window.setTimeout(() => setRendered(false), prefersReducedMotion() ? 0 : MODAL_EXIT_MS);
+    return () => window.clearTimeout(timer);
+  }, [open, rendered]);
+
   useEffect(() => {
     if (!open) return;
 
@@ -35,13 +51,17 @@ export default function Modal({
     };
   }, [open, onClose]);
 
-  if (!open) return null;
+  if (!open && !rendered) return null;
+  const closing = !open;
+  const view = open ? { title, subtitle, children, Icon } : frozen.current;
   const modalRoot = contentOnly ? document.getElementById("main-modal-root") : null;
   if (contentOnly && !modalRoot) return null;
 
   const dialog = (
     <div
-      onClick={onClose}
+      className={`motion-overlay${closing ? " is-closing" : ""}`}
+      aria-hidden={closing || undefined}
+      onClick={closing ? undefined : onClose}
       style={{
         position: contentOnly ? "absolute" : "fixed",
         inset: 0,
@@ -59,7 +79,9 @@ export default function Modal({
       }}
     >
       <div
-        className="slide-up"
+        className={`motion-dialog${closing ? " is-closing" : ""}`}
+        role="dialog"
+        aria-modal="true"
         onClick={(e) => e.stopPropagation()}
         style={{
           width: "100%",
@@ -85,7 +107,7 @@ export default function Modal({
             borderBottom: "1px solid var(--border-subtle)",
           }}
         >
-          {Icon && (
+          {view.Icon && (
             <div
               style={{
                 width: 40,
@@ -100,7 +122,7 @@ export default function Modal({
                 flexShrink: 0,
               }}
             >
-              <Icon size={18} color="#fff" />
+              <view.Icon size={18} color="#fff" />
             </div>
           )}
 
@@ -113,10 +135,10 @@ export default function Modal({
                 color: "var(--text-primary)",
               }}
             >
-              {tx(title)}
+              {tx(view.title)}
             </div>
 
-            {subtitle && (
+            {view.subtitle && (
               <div
                 style={{
                   fontSize: 12,
@@ -124,7 +146,7 @@ export default function Modal({
                   color: "var(--text-muted)",
                 }}
               >
-                {tx(subtitle)}
+                {tx(view.subtitle)}
               </div>
             )}
           </div>
@@ -147,7 +169,7 @@ export default function Modal({
         </div>
 
         <div style={{ padding: 20 }}>
-          {children}
+          {view.children}
         </div>
       </div>
     </div>

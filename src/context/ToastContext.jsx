@@ -12,27 +12,27 @@ const ToastContext = createContext(null);
 const toastConfig = {
   success: {
     icon: CheckCircle,
-    color: "#10B981",
-    bg: "#ECFDF5",
-    border: "#A7F3D0",
+    color: "var(--success)",
+    bg: "var(--success-light)",
+    border: "var(--success-border)",
   },
   error: {
     icon: XCircle,
-    color: "#EF4444",
-    bg: "#FEF2F2",
-    border: "#FCA5A5",
+    color: "var(--danger)",
+    bg: "var(--danger-light)",
+    border: "var(--danger-border)",
   },
   warning: {
     icon: AlertTriangle,
-    color: "#F59E0B",
-    bg: "#FFFBEB",
-    border: "#FDE68A",
+    color: "var(--warning)",
+    bg: "var(--warning-light)",
+    border: "var(--warning-border)",
   },
   info: {
     icon: Info,
-    color: "#2563EB",
-    bg: "#EFF6FF",
-    border: "#BFDBFE",
+    color: "var(--brand)",
+    bg: "var(--brand-light)",
+    border: "var(--brand-border)",
   },
 };
 export function ToastProvider({ children }) {
@@ -106,7 +106,7 @@ export function ToastProvider({ children }) {
                 <div
                   className="text-sm font-semibold leading-tight"
                   style={{
-                    color: "#111827",
+                    color: "var(--text-primary)",
                   }}
                 >
                   {tx(t.title)}
@@ -115,7 +115,7 @@ export function ToastProvider({ children }) {
                   <div
                     className="text-xs mt-0.5 leading-relaxed"
                     style={{
-                      color: "#6B7280",
+                      color: "var(--text-muted)",
                     }}
                   >
                     {tx(t.message)}
@@ -128,7 +128,7 @@ export function ToastProvider({ children }) {
                 className="p-1 rounded-lg hover:bg-gray-100 transition-colors shrink-0 mt-0.5"
                 aria-label={tx("Bildirishnomani yopish")}
                 style={{
-                  color: "#9CA3AF",
+                  color: "var(--text-muted)",
                 }}
               >
                 <X size={13} />

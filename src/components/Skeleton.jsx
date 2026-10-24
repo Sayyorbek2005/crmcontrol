@@ -1,6 +1,8 @@
 import './Skeleton.css';
 /* Skeleton shimmer components used across all loading states */
 
+// imports
+
 export function SkeletonLine({ w = "100%", h = 14 }) {
   return (
     <div

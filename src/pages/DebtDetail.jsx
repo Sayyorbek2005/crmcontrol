@@ -21,6 +21,7 @@ import {
 import { customers } from "../data/mockData";
 import { useToast } from "../context/ToastContext";
 
+import { formatCurrency, moneyInputValue, toBaseMoney } from "../data/currency";
 const extraDebtors = [
   { id: 10, name: "Timur Sobirov", phone: "+998 90 111 22 33", purchases: 5, spent: 1200000, debt: 180000, paid: 60000, dueDate: "25 Sep 2026", overdue: false, daysPast: 0, lastPurchase: "02 Sep 2026", status: "debtor", region: "Toshkent" },
   { id: 11, name: "Umida Xoliqova", phone: "+998 91 222 33 44", purchases: 2, spent: 450000, debt: 90000, paid: 20000, dueDate: "15 Sep 2026", overdue: true, daysPast: 7, lastPurchase: "01 Sep 2026", status: "debtor", region: "Andijon" },
@@ -78,7 +79,7 @@ export default function DebtDetail({ debtorId, onBack }) {
     if (!amt || amt <= 0) return;
     setPaidList((prev) => [{ id: "P-" + Date.now(), amount: amt, method: payMethod, date: "08 Sep 2026", note: "" }, ...prev]);
     setShowPay(false);
-    success("To'lov qabul qilindi", data.name + " — " + amt.toLocaleString() + " so'm");
+    success("To'lov qabul qilindi", data.name + " — " + formatCurrency(amt));
     setPayAmount(data.debt.toString());
   };
   const saveEdit = () => {
@@ -169,9 +170,9 @@ export default function DebtDetail({ debtorId, onBack }) {
 
           <div className="grid grid-cols-2 gap-3">
             {[
-              { label: "Jami qarz", value: data.debt.toLocaleString() + " so'm", icon: CreditCard, color: "var(--danger)", bg: "var(--danger-light)" },
-              { label: "To'langan", value: paidList.reduce((s, p) => s + p.amount, 0).toLocaleString() + " so'm", icon: CheckCircle, color: "var(--success)", bg: "var(--success-light)" },
-              { label: "Qoldi", value: remaining.toLocaleString() + " so'm", icon: AlertTriangle, color: "var(--warning)", bg: "var(--warning-light)" },
+              { label: "Jami qarz", value: formatCurrency(data.debt), icon: CreditCard, color: "var(--danger)", bg: "var(--danger-light)" },
+              { label: "To'langan", value: formatCurrency(paidList.reduce((s, p) => s + p.amount, 0)), icon: CheckCircle, color: "var(--success)", bg: "var(--success-light)" },
+              { label: "Qoldi", value: formatCurrency(remaining), icon: AlertTriangle, color: "var(--warning)", bg: "var(--warning-light)" },
               { label: "Muddat", value: data.overdue ? data.daysPast + " kun o'tdi" : data.dueDate, icon: Clock, color: data.overdue ? "var(--danger)" : "var(--text-muted)", bg: data.overdue ? "var(--danger-light)" : "var(--surface-2)" },
             ].map((c) => (
               <div key={c.label} className="card p-4">
@@ -216,7 +217,7 @@ export default function DebtDetail({ debtorId, onBack }) {
                 {paidList.map((p) => (
                   <tr key={p.id} className="border-t table-row-hover" style={{ borderColor: "var(--border-subtle)" }}>
                     <td className="px-5 py-3 text-sm font-medium" style={{ color: "var(--text-primary)" }}>{p.id}</td>
-                    <td className="px-5 py-3 text-sm font-semibold" style={{ color: "var(--success)" }}>{tx(p.amount.toLocaleString())}{tx(" so'm")}</td>
+                    <td className="px-5 py-3 text-sm font-semibold" style={{ color: "var(--success)" }}>{formatCurrency(p.amount)}</td>
                     <td className="px-5 py-3 text-sm" style={{ color: "var(--text-secondary)" }}>{tx(p.method)}</td>
                     <td className="px-5 py-3 text-xs" style={{ color: "var(--text-faint)" }}>{tx(p.date)}</td>
                     <td className="px-5 py-3 text-sm" style={{ color: "var(--text-muted)" }}>{tx(p.note || "—")}</td>
@@ -229,9 +230,9 @@ export default function DebtDetail({ debtorId, onBack }) {
           {tab === "activity" && (
             <div className="p-5 space-y-4">
               {[
-                { t: "Qarz yaratildi — " + data.debt.toLocaleString() + " so'm", time: data.lastPurchase + ", 16:40", icon: CreditCard, color: "var(--danger)" },
+                { t: "Qarz yaratildi — " + formatCurrency(data.debt), time: data.lastPurchase + ", 16:40", icon: CreditCard, color: "var(--danger)" },
                 { t: "To'lov qabul qilindi — 60 000 so'm", time: "01 Sep 2026, 10:15", icon: CheckCircle, color: "var(--success)" },
-                { t: "Yangi xarid — " + data.spent.toLocaleString() + " so'm", time: data.lastPurchase + ", 14:22", icon: ShoppingCart, color: "var(--brand)" },
+                { t: "Yangi xarid — " + formatCurrency(data.spent), time: data.lastPurchase + ", 14:22", icon: ShoppingCart, color: "var(--brand)" },
               ].map((a, i) => (
                 <div key={i} className="flex items-start gap-3">
                   <div className="p-2 rounded-xl shrink-0" style={{ background: "var(--surface-2)" }}>
@@ -255,7 +256,7 @@ export default function DebtDetail({ debtorId, onBack }) {
             <div className="flex items-center justify-between mb-5">
               <div>
                 <h2 className="font-display font-bold text-lg" style={{ color: "var(--text-primary)" }}>{tx("To'lov qabul qilish")}</h2>
-                <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>{tx("Qoldi: ")}<strong style={{ color: "var(--danger)" }}>{tx(remaining.toLocaleString())}{tx(" so'm")}</strong>
+                <p className="text-sm mt-1" style={{ color: "var(--text-muted)" }}>{tx("Qoldi: ")}<strong style={{ color: "var(--danger)" }}>{formatCurrency(remaining)}</strong>
                 </p>
               </div>
               <button onClick={() => setShowPay(false)} className="p-2 rounded-xl hover:opacity-70" style={{ color: "var(--text-faint)" }}>
@@ -268,8 +269,9 @@ export default function DebtDetail({ debtorId, onBack }) {
                 <div className="relative">
                   <input
                     type="number"
-                    value={payAmount}
-                    onChange={(e) => setPayAmount(e.target.value)}
+                    step="any"
+                    value={moneyInputValue(payAmount, false)}
+                    onChange={(e) => setPayAmount(String(toBaseMoney(e.target.value)))}
                     className="input-base"
                     style={{ fontWeight: 700, color: "var(--brand)" }}
                   />
@@ -342,7 +344,7 @@ export default function DebtDetail({ debtorId, onBack }) {
               </div>
               <div>
                 <label className="block text-xs font-semibold mb-2" style={{ color: "var(--text-secondary)" }}>{tx("Qarz summasi (so'm)")}</label>
-                <input type="number" className="input-base" value={form.debt} onChange={(e) => setForm({ ...form, debt: e.target.value })} />
+                <input type="number" step="any" className="input-base" value={moneyInputValue(form.debt, false)} onChange={(e) => setForm({ ...form, debt: String(toBaseMoney(e.target.value)) })} />
               </div>
             </div>
             <div className="flex gap-3 mt-6">

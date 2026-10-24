@@ -18,10 +18,15 @@ import {
 import { addressPhoneDigits } from './posHelpers';
 import { PosPaymentPanel } from './PosPaymentPanel';
 
+import { formatCurrency } from "../data/currency";
 export function CartPanelContent({
   cart,
+  reservationMode = false,
+  allowReservationCheckout = false,
   customerName,
   setCustomerName,
+  customerSuggestions = [],
+  selectCustomer,
   customerPhone,
   setCustomerPhone,
   addresses,
@@ -47,14 +52,16 @@ export function CartPanelContent({
   total,
   handleCheckout,
   handleOpenReceipt,
+  onSaveDraft,
+  hideSaveDraftButton = false,
   customerError,
   paymentOpen,
   paymentAmount,
   setPaymentAmount,
   paymentMethod,
   setPaymentMethod,
-  paymentCard,
-  setPaymentCard,
+  selectedCardId,
+  setSelectedCardId,
   debtDueDate,
   setDebtDueDate,
   paymentError,
@@ -274,9 +281,7 @@ export function CartPanelContent({
                       </div>
 
                       <span className="pos-item-total">
-                        {tx((
-                          item.price * item.qty
-                        ).toLocaleString())}{" "}{tx("so'm")}</span>
+                        {formatCurrency(item.price * item.qty)}</span>
 
                       <button
                         type="button"
@@ -339,8 +344,8 @@ export function CartPanelContent({
           setPaymentAmount={setPaymentAmount}
           method={paymentMethod}
           setMethod={setPaymentMethod}
-          cardForm={paymentCard}
-          setCardForm={setPaymentCard}
+          selectedCardId={selectedCardId}
+          setSelectedCardId={setSelectedCardId}
           debtDueDate={debtDueDate}
           setDebtDueDate={setDebtDueDate}
           error={paymentError}
@@ -354,7 +359,7 @@ export function CartPanelContent({
       <section className="pos-cart-section pos-order-panel" aria-label={tx("Buyurtma ma'lumotlari")}>
       <div className="cart-header">
         <FiShoppingCart size={20} className="cart-icon" />
-        <h2>{tx("Savatcha")}</h2>
+        <h2>{tx(reservationMode ? "Buyurtma tarkibi" : "Savatcha")}</h2>
         <span className="cart-count">({tx(cart.length)})</span>
         <button
           type="button"
@@ -386,12 +391,22 @@ export function CartPanelContent({
               placeholder={tx("Ism (majburiy)")}
               value={customerName}
               onChange={(e) => {
-                setCustomerName(e.target.value);
+                setCustomerName(String(e.target.value).trimStart().replace(/\s+/g, " ").split(" ").map((word) => word ? word[0].toLocaleUpperCase("uz-UZ") + word.slice(1).toLocaleLowerCase("uz-UZ") : "").join(" "));
               }}
               className="customer-input"
               style={{ outline: "none" }}
             />
           </div>
+          {customerSuggestions.length > 0 && (
+            <div className="customer-suggestions" role="listbox" aria-label={tx("Mijozlar")}>
+              {customerSuggestions.map((customer) => (
+                <button key={`${customer.name}-${customer.phone}`} type="button" role="option" aria-selected={false} onClick={() => selectCustomer(customer)}>
+                  <span>{customer.name}</span>
+                  {customer.phone && <small>+998 {customer.phone.replace(/(\d{2})(\d{3})(\d{2})(\d{2})/, "$1 $2 $3 $4")}</small>}
+                </button>
+              ))}
+            </div>
+          )}
 
           <div className="customer-input-box">
             <FiPhone
@@ -399,13 +414,13 @@ export function CartPanelContent({
               className="customer-input-icon"
             />
 
-            {customerPhone && <span className="phone-prefix">+998</span>}
+            <span className="phone-prefix">+998</span>
 
             <input
               type="text"
               inputMode="numeric"
-              placeholder={tx("Telefon raqami")}
-              value={customerPhone}
+              placeholder={tx("97 575 46 06")}
+              value={customerPhone.replace(/(\d{2})(\d{3})(\d{2})(\d{2})/, "$1 $2 $3 $4")}
               onChange={handlePhoneChange}
               className="customer-input phone-input"
               style={{ outline: "none" }}
@@ -541,7 +556,7 @@ export function CartPanelContent({
             <span>{tx("Jami")}</span>
 
             <span>
-              {tx(subtotal.toLocaleString())}{tx(" so'm")}</span>
+              {formatCurrency(subtotal)}</span>
           </div>
 
           {globalDiscount > 0 && (
@@ -550,7 +565,7 @@ export function CartPanelContent({
               </span>
 
               <span>
-                -{tx(discountAmt.toLocaleString())}{tx(" so'm")}</span>
+                -{formatCurrency(discountAmt)}</span>
             </div>
           )}
 
@@ -563,18 +578,29 @@ export function CartPanelContent({
             <span>{tx("To'lov")}</span>
 
             <span className="total-price">
-              {tx(total.toLocaleString())}{tx(" so'm")}</span>
+              {formatCurrency(total)}</span>
           </div>
         </div>
         {/* SOTUVNI YAKUNLASH */}
 
-        <button
+        {reservationMode ? (
+          <p className="pos-reservation-note">{tx("Saqlanganda mahsulotlar buyurtmaga band qilinadi, ombor qoldig‘i o‘zgarmaydi.")}</p>
+        ) : !hideSaveDraftButton && <button
+          type="button"
+          className="pos-save-draft-btn"
+          onClick={onSaveDraft}
+          disabled={cart.length === 0}
+        >
+          <FiFileText size={16} />{tx("Sotuvni saqlash")}
+        </button>}
+
+        {(!reservationMode || allowReservationCheckout) && <button
           type="button"
           onClick={handleCheckout}
           disabled={cart.length === 0}
           className="checkout-btn"
         >
-          <FiCreditCard size={17} />{tx("To'lov qabul qilish")}</button>
+          <FiCreditCard size={17} />{tx("To'lov qabul qilish")}</button>}
           </div>
         </div>
       </section>
@@ -590,11 +616,11 @@ export function CartPanelContent({
               {cart.map((item) => (
                 <div key={item.cartKey}>
                   <span>{item.name} · {tx(item.qty)}{tx(" dona")}</span>
-                  <strong>{tx((item.price * item.qty).toLocaleString())}{tx(" so'm")}</strong>
+                  <strong>{formatCurrency(item.price * item.qty)}</strong>
                 </div>
               ))}
             </div>
-            <div className="pos-cart-all-total"><span>{tx("Jami")}</span><strong>{tx(total.toLocaleString())}{tx(" so'm")}</strong></div>
+            <div className="pos-cart-all-total"><span>{tx("Jami")}</span><strong>{formatCurrency(total)}</strong></div>
             <button
               type="button"
               className="pos-cart-all-receipt"

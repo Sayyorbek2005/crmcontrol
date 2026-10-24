@@ -1,8 +1,8 @@
 export const POS_DRAFT_KEY = "crm_pos_draft";
 
-export const readPosDraft = () => {
+export const readPosDraft = (key = POS_DRAFT_KEY) => {
   try {
-    const draft = JSON.parse(localStorage.getItem(POS_DRAFT_KEY) || "null");
+    const draft = JSON.parse(localStorage.getItem(key) || "null");
     return draft && typeof draft === "object" ? draft : {};
   } catch {
     return {};

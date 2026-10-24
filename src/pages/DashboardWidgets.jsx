@@ -12,6 +12,7 @@ export const KpiCard = ({
   color,
   bg,
   active,
+  debt = false,
   onClick,
 }) => {
   useUILanguage();
@@ -22,9 +23,9 @@ export const KpiCard = ({
         active ? "kpi-card-active" : ""
       }`}
       style={{
-        background: "var(--surface)",
+        background: debt ? "var(--danger-light)" : "var(--surface)",
 
-        border: active
+        border: debt ? "1px solid color-mix(in srgb, var(--danger) 30%, var(--border))" : active
           ? "2px solid var(--brand)"
           : "1px solid var(--border)",
 
@@ -45,7 +46,7 @@ export const KpiCard = ({
           "0 10px 25px rgba(15,23,42,0.10)";
 
         e.currentTarget.style.borderColor =
-          "var(--brand)";
+          debt ? "var(--danger)" : "var(--brand)";
       }}
       onMouseLeave={(e) => {
         e.currentTarget.style.transform =
@@ -57,7 +58,9 @@ export const KpiCard = ({
             : "0 2px 8px rgba(15,23,42,0.04)";
 
         e.currentTarget.style.borderColor =
-          active
+          debt
+            ? "color-mix(in srgb, var(--danger) 30%, var(--border))"
+            : active
             ? "var(--brand)"
             : "var(--border)";
       }}
@@ -128,7 +131,7 @@ export const KpiCard = ({
               "'Manrope', sans-serif",
 
             color:
-              "var(--text-primary)",
+              debt ? "var(--danger)" : "var(--text-primary)",
           }}
         >
           {tx(value)}
@@ -139,7 +142,7 @@ export const KpiCard = ({
         className="text-sm font-medium mb-0.5"
         style={{
           color:
-            "var(--text-secondary)",
+            debt ? "var(--danger)" : "var(--text-secondary)",
         }}
       >
         {tx(label)}

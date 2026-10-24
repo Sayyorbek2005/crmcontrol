@@ -2,6 +2,7 @@ import { translateText as tx } from "../locales/translateText";
 import { useLanguage as useUILanguage } from "../context/LanguageContext";
 import React, { useState, useEffect } from "react";
 import "./Sidebar.css";
+import { useTenantCompanyName } from "../data/tenantBrand";
 
 import {
   LayoutDashboard,
@@ -29,6 +30,8 @@ import {
   Menu,
   Phone,
   MessageCircle,
+  FilePenLine,
+  ClipboardList,
 } from "lucide-react";
 
 import { useLanguage } from "../context/LanguageContext";
@@ -59,11 +62,22 @@ const buildNavItems = (t) => [
         icon: PlusCircle,
       },
       {
+        id: "sales-pos",
+        label: t("sidebar.sales.pos", "Qo‘shimcha sotuv"),
+        icon: ShoppingCart,
+      },
+      {
         id: "sales-returns",
         label: t("sidebar.sales.returns", "Qaytarilgan"),
         icon: RotateCcw,
       },
     ],
+  },
+
+  {
+    id: "orders",
+    label: "Buyurtmalar",
+    icon: ClipboardList,
   },
 
   {
@@ -134,14 +148,16 @@ const buildNavItems = (t) => [
   },
 
   {
-    id: "settings",
-    label: t("sidebar.settings", "Sozlamalar"),
-    icon: Settings,
-  },
-  {
     id: "ai-chat",
     label: "AI Chat",
     icon: MessageCircle,
+  },
+  { id: "drafts", label: "Qoralama", icon: FilePenLine },
+
+  {
+    id: "settings",
+    label: t("sidebar.settings", "Sozlamalar"),
+    icon: Settings,
   },
 ];
 
@@ -159,6 +175,9 @@ export default function Sidebar({
 }) {
   useUILanguage();
   const { t } = useLanguage();
+  const companyName = useTenantCompanyName();
+
+  const sidebarActive = active.startsWith("customer-") ? "customers-all" : active.startsWith("product-") ? "products-all" : active.startsWith("supplier-") ? "suppliers" : active.startsWith("employee-") ? "employees" : active.startsWith("debt-") ? "finance-debt" : active;
 
   const navItems = buildNavItems(t)
     .map((item) => item.children
@@ -190,6 +209,12 @@ export default function Sidebar({
     };
   }, []);
 
+  const activeGroup = sidebarActive.startsWith("sales-") ? "sales-group" : sidebarActive === "products-all" ? "products-group" : sidebarActive.startsWith("finance-") ? "finance-group" : null;
+
+  useEffect(() => {
+    if (activeGroup) setOpenGroups((groups) => groups.includes(activeGroup) ? groups : [...groups, activeGroup]);
+  }, [activeGroup]);
+
   const toggleGroup = (key) => {
     setOpenGroups((groups) =>
       groups.includes(key)
@@ -199,7 +224,7 @@ export default function Sidebar({
   };
 
   const isChildActive = (children) => {
-    return children.some((child) => child.id === active);
+    return children.some((child) => child.id === sidebarActive);
   };
 
   // MOBILE MENU
@@ -284,7 +309,7 @@ export default function Sidebar({
                     color: "var(--text-primary, #111827)",
                     fontWeight: 800,
                   }}
-                >{tx("CRM System")}</div>
+                >{companyName}</div>
               </div>
             )}
           </div>
@@ -391,20 +416,20 @@ export default function Sidebar({
                               onClose();
                             }
                           }}
-                          className="flex items-center w-full rounded-lg px-2.5 py-1.5 text-sm transition-all"
+                          className={`flex items-center w-full rounded-lg px-2.5 py-1.5 text-sm transition-all${child.id === "sales-pos" ? " active:scale-95" : ""}`}
                           style={{
                             color:
-                              active === child.id
+                              sidebarActive === child.id
                                 ? "var(--brand, #6366f1)"
                                 : "var(--text-muted, #6b7280)",
 
                             background:
-                              active === child.id
+                              sidebarActive === child.id
                                 ? "var(--brand-light, #eeefff)"
                                 : "transparent",
 
                             fontWeight:
-                              active === child.id ? 600 : 400,
+                              sidebarActive === child.id ? 600 : 400,
 
                             cursor: "pointer",
                           }}
@@ -428,8 +453,8 @@ export default function Sidebar({
             const navItem = item;
 
             const isActive =
-              active === navItem.id ||
-              active.startsWith(navItem.id + "-");
+              sidebarActive === navItem.id ||
+              sidebarActive.startsWith(navItem.id + "-");
 
             return (
               <button
@@ -538,6 +563,13 @@ export default function Sidebar({
           {/* ADMIN */}
           {(!collapsed || isMobile) && (
             <div className="flex items-center gap-2.5 px-2.5 py-2 rounded-xl transition-all mt-1">
+              <button
+                type="button"
+                onClick={() => { onNavigate("settings"); onClose?.(); }}
+                aria-label={tx("Profilni ochish")}
+                className="flex items-center gap-2.5 flex-1 min-w-0 text-left rounded-xl hover:opacity-75"
+                style={{ cursor: "pointer" }}
+              >
               <div
                 className="w-8 h-8 rounded-xl flex items-center justify-center text-white text-xs font-bold shrink-0"
                 style={{
@@ -568,6 +600,8 @@ export default function Sidebar({
                   {tx(profile?.position || (user?.type === "director" ? "Direktor" : user?.role || "Xodim"))}
                 </div>
               </div>
+
+              </button>
 
               <button
                 onClick={() => setLogoutConfirmOpen(true)}
@@ -833,6 +867,7 @@ export default function Sidebar({
         title={tx("Hisobdan chiqish")}
         message={tx("Haqiqatan ham hisobdan chiqmoqchimisiz?")}
         confirmLabel={tx("Ha, chiqish")}
+        confirmDanger
         onCancel={() => setLogoutConfirmOpen(false)}
         onConfirm={() => { setLogoutConfirmOpen(false); onNavigate("login"); }}
       />

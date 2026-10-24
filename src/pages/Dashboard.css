@@ -178,6 +178,36 @@ button,
     grid-template-columns: minmax(0, 1fr) !important;
   }
 
+  /* Keep dashboard KPI cards readable in a two-by-two mobile grid. */
+  .dashboard-kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 10px !important;
+  }
+
+  .dashboard-kpi-grid > * {
+    min-width: 0;
+    padding: 0.75rem !important;
+  }
+
+  .dashboard-kpi-grid > * .mb-4 {
+    margin-bottom: 0.6rem !important;
+  }
+
+  .dashboard-kpi-grid > * .count-up {
+    font-size: 1.05rem !important;
+    overflow-wrap: anywhere;
+  }
+
+  .dashboard-kpi-grid > * .text-sm {
+    font-size: 0.8rem !important;
+    overflow-wrap: anywhere;
+  }
+
+  .dashboard-kpi-grid > * .text-xs {
+    font-size: 0.65rem !important;
+    overflow-wrap: anywhere;
+  }
+
   h1 {
     font-size: 1.15rem !important;
   }
@@ -234,6 +264,27 @@ button,
   .dashboard-kpi-grid {
     grid-template-columns: 1fr !important;
     gap: 0.5rem !important;
+  }
+
+  .dashboard-kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+  }
+
+  .dashboard-kpi-grid > *.p-5 {
+    padding: 0.65rem !important;
+  }
+
+  .dashboard-kpi-grid > * .count-up {
+    font-size: 0.95rem !important;
+  }
+
+  .dashboard-kpi-grid > * .text-sm {
+    font-size: 0.75rem !important;
+  }
+
+  .dashboard-kpi-grid > * .text-xs {
+    font-size: 0.6rem !important;
   }
 
   .p-4,

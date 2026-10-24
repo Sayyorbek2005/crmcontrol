@@ -343,6 +343,8 @@
 :root {
 
   --bg: #f7f8fc;
+  --bg-main: var(--bg);
+  --success-border: #a7f3d0;
   --surface: #ffffff;
   --surface-2: #f9fafb;
   --surface-raised: #ffffff;
@@ -381,6 +383,8 @@
 }
 
 [data-theme="dark"] {
+  color-scheme: dark;
+  --success-border: rgba(52, 211, 153, 0.35);
   --bg: #0b1120;
   --surface: #111827;
   --surface-2: #0f172a;
@@ -390,7 +394,7 @@
   --text-primary: #f9fafb;
   --text-secondary: #e5e7eb;
   --text-muted: #9ca3af;
-  --text-faint: #6b7280;
+  --text-faint: #94a3b8;
   --brand: #3b82f6;
   --brand-hover: #2563eb;
   --brand-light: rgba(59, 130, 246, 0.12);

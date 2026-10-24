@@ -118,6 +118,14 @@
 @media (max-width: 900px) {
   .detail-grid { grid-template-columns: 1fr !important; }
 }
+/* Keep the supplier profile actions and KPI cards paired on narrow phones. */
+@media (max-width: 340px) {
+  .detail-grid > aside > .card > .grid.grid-cols-2,
+  .detail-grid > aside > .grid.grid-cols-2 {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+  }
+}
 .supplier-feature-panel { padding: 20px; }
 .supplier-debt-summary { display: flex; align-items: center; justify-content: space-between; padding: 16px; border: 1px solid var(--danger); border-radius: 12px; background: var(--danger-light); color: var(--danger); }
 .supplier-debt-summary strong { font-size: 20px; }

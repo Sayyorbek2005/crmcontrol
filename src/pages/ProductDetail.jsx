@@ -26,6 +26,7 @@ import {
 } from "recharts";
 // import { useToast } from "../context/ToastContext";
 import { useLanguage } from "../context/LanguageContext";
+import { formatCurrency, moneyInputValue, toBaseMoney } from "../data/currency";
 const readList = (key) => {
   try { const value = JSON.parse(localStorage.getItem(key) || "[]"); return Array.isArray(value) ? value : []; } catch { return []; }
 };
@@ -82,7 +83,7 @@ export default function ProductDetail({ productId, onBack }) {
       color: "var(--danger)",
     },
   };
-  const st = statusMap[product.status];
+  const st = statusMap[product.status] || statusMap.active;
   const margin = product.price > 0
     ? Math.round(((product.price - product.cost) / product.price) * 100)
     : 0;
@@ -97,7 +98,7 @@ export default function ProductDetail({ productId, onBack }) {
   const vatRate = Number(product.vat ?? product.vatRate ?? 0);
   const productCustomerReturns = customerReturns.filter((item) => item.status === "approved" && String(item.productId) === String(product.id));
   const productSupplierReturns = supplierReturns.filter((item) => String(item.productId) === String(product.id));
-  const money = (value) => `${Math.round(Number(value || 0)).toLocaleString("uz-UZ")} so'm`;
+  const money = (value) => formatCurrency(value);
   const dateLabel = (value) => parsedDate(value)?.toLocaleDateString("uz-UZ", { day: "2-digit", month: "short", year: "numeric" }) || "—";
   const historyEvents = [
     ...productReceipts.filter((item) => item.qty > 0).map((item) => ({ ...item, type: "in", reason: "Ta'minotchidan qabul qilindi" })),
@@ -227,13 +228,13 @@ export default function ProductDetail({ productId, onBack }) {
 
       {/* Top section */}
       <div
-        className="grid gap-5"
+        className="grid gap-5 pd-detail-layout"
         style={{
           gridTemplateColumns: "1fr 2fr",
         }}
       >
         {/* Product card */}
-        <div className="card p-6 flex flex-col items-center text-center">
+        <div className="card p-6 flex flex-col items-center text-center pd-product-main-card">
           <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-5" style={{ background: "var(--brand-light)", color: "var(--brand)" }}>
             <Package size={30} strokeWidth={1.8} aria-label={tx("Mahsulot")}/>
           </div>
@@ -277,7 +278,7 @@ export default function ProductDetail({ productId, onBack }) {
                   color: "var(--brand)",
                 }}
               >
-                {tx(product.price.toLocaleString())} {tx(t("productDetail.currency", "so'm"))}
+                {formatCurrency(product.price)}
               </span>
             </div>
             <div
@@ -300,7 +301,7 @@ export default function ProductDetail({ productId, onBack }) {
                   color: "var(--text-secondary)",
                 }}
               >
-                {tx(product.cost.toLocaleString())} {tx(t("productDetail.currency", "so'm"))}
+                {formatCurrency(product.cost)}
               </span>
             </div>
             <div
@@ -338,7 +339,7 @@ export default function ProductDetail({ productId, onBack }) {
         </div>
 
         {/* KPI cards */}
-        <div className="grid grid-cols-2 gap-4 content-start">
+        <div className="grid grid-cols-2 gap-4 content-start pd-product-kpis">
           {[
             {
               icon: ShoppingCart,
@@ -575,15 +576,15 @@ export default function ProductDetail({ productId, onBack }) {
                 {[
                   {
                     label: t("productDetail.sellPrice", "Sotuv narxi"),
-                    value: `${product.price.toLocaleString()} ${t("productDetail.currency", "so'm")}`,
+                    value: formatCurrency(product.price),
                   },
                   {
                     label: t("productDetail.costPrice", "Tan narxi"),
-                    value: `${product.cost.toLocaleString()} ${t("productDetail.currency", "so'm")}`,
+                    value: formatCurrency(product.cost),
                   },
                   {
                     label: t("productDetail.price.profit", "Foyda"),
-                    value: `${(product.price - product.cost).toLocaleString()} ${t("productDetail.currency", "so'm")}`,
+                    value: formatCurrency(product.price - product.cost),
                   },
                   {
                     label: t("productDetail.price.margin", "Marja"),
@@ -625,7 +626,7 @@ export default function ProductDetail({ productId, onBack }) {
 
           {tab === "inventory" && (
             <div className="space-y-4">
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-3 gap-4 pd-inventory-stats">
                 {[
                   {
                     label: t("productDetail.inv.current", "Joriy qoldiq"),
@@ -752,9 +753,9 @@ export default function ProductDetail({ productId, onBack }) {
 
           {tab === "pricing" && <div className="grid md:grid-cols-2 gap-4">{[["Sotuv narxi", money(product.price)], ["Tan narxi", money(product.cost)], ["Har birlik foyda", money(Number(product.price || 0) - Number(product.cost || 0))], ["Marja", `${margin}%`], ["QQS", vatRate ? `${vatRate}%` : "Belgilanmagan"], ["Oxirgi kirim tannarxi", money(productReceipts.find((item) => item.qty > 0)?.receipt?.products?.find((item) => String(item.id) === String(product.id))?.cost ?? product.cost)]].map(([label, value]) => <div key={label} className="flex justify-between gap-4 p-4 rounded-xl" style={{ background: "var(--surface-2)" }}><span className="text-sm" style={{ color: "var(--text-muted)" }}>{tx(label)}</span><b className="text-sm">{value}</b></div>)}</div>}
 
-          {tab === "sales" && <div className="space-y-4"><div className="grid grid-cols-3 gap-3">{[["Bugun sotilgan", soldToday], ["Jami sotilgan", soldTotal], ["Jami daromad", money(productSales.reduce((sum, item) => sum + item.amount, 0))]].map(([label, value]) => <div key={label} className="p-4 rounded-xl" style={{ background: "var(--surface-2)" }}><small style={{ color: "var(--text-muted)" }}>{tx(label)}</small><b className="block mt-1 text-lg">{typeof value === "number" ? `${value} dona` : value}</b></div>)}</div><div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr style={{ background: "var(--surface-2)" }}>{["Sana", "Mijoz", "Miqdor", "Summa", "To'lov"].map((label) => <th className="text-left p-3 text-xs" key={label}>{tx(label)}</th>)}</tr></thead><tbody>{productSales.filter((item) => item.qty > 0).sort((left, right) => (right.date?.getTime() || 0) - (left.date?.getTime() || 0)).map(({ sale, date, qty, amount }) => <tr key={sale.id} style={{ borderBottom: "1px solid var(--border-subtle)" }}><td className="p-3">{dateLabel(date)}</td><td className="p-3">{sale.customer || sale.customerName || "—"}</td><td className="p-3">{qty} dona</td><td className="p-3">{money(amount)}</td><td className="p-3">{tx(sale.payment || sale.paymentMethod || "—")}</td></tr>)}</tbody></table></div>{!productSales.some((item) => item.qty > 0) && <EmptyData icon={BarChart3} text="Bu mahsulot hali sotilmagan"/>}</div>}
+          {tab === "sales" && <div className="space-y-4"><div className="grid grid-cols-3 gap-3 pd-sales-stats">{[["Bugun sotilgan", soldToday], ["Jami sotilgan", soldTotal], ["Jami daromad", money(productSales.reduce((sum, item) => sum + item.amount, 0))]].map(([label, value]) => <div key={label} className="p-4 rounded-xl" style={{ background: "var(--surface-2)" }}><small style={{ color: "var(--text-muted)" }}>{tx(label)}</small><b className="block mt-1 text-lg">{typeof value === "number" ? `${value} dona` : value}</b></div>)}</div><div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr style={{ background: "var(--surface-2)" }}>{["Sana", "Mijoz", "Miqdor", "Summa", "To'lov"].map((label) => <th className="text-left p-3 text-xs" key={label}>{tx(label)}</th>)}</tr></thead><tbody>{productSales.filter((item) => item.qty > 0).sort((left, right) => (right.date?.getTime() || 0) - (left.date?.getTime() || 0)).map(({ sale, date, qty, amount }) => <tr key={sale.id} style={{ borderBottom: "1px solid var(--border-subtle)" }}><td className="p-3">{dateLabel(date)}</td><td className="p-3">{sale.customer || sale.customerName || "—"}</td><td className="p-3">{qty}{tx("dona")}</td><td className="p-3">{money(amount)}</td><td className="p-3">{tx(sale.payment || sale.paymentMethod || "—")}</td></tr>)}</tbody></table></div>{!productSales.some((item) => item.qty > 0) && <EmptyData icon={BarChart3} text="Bu mahsulot hali sotilmagan"/>}</div>}
 
-          {tab === "history" && <div className="space-y-2">{historyEvents.map((event, index) => <div key={`${event.type}-${event.date?.getTime()}-${index}`} className="flex justify-between items-center gap-4 p-4 rounded-xl" style={{ background: "var(--surface-2)" }}><div className="flex items-center gap-3">{event.type === "in" ? <ArrowUpCircle size={18} style={{ color: "var(--success)" }}/> : <ArrowDownCircle size={18} style={{ color: "var(--danger)" }}/>}<div><b className="text-sm">{tx(event.reason)}</b><small className="block mt-1" style={{ color: "var(--text-muted)" }}>{dateLabel(event.date)}</small></div></div><b style={{ color: event.type === "in" ? "var(--success)" : "var(--danger)" }}>{event.type === "in" ? "+" : "−"}{event.qty} dona</b></div>)}{!historyEvents.length && <EmptyData icon={Package} text="Bu mahsulot bo'yicha harakatlar hali mavjud emas"/>}</div>}
+          {tab === "history" && <div className="space-y-2">{historyEvents.map((event, index) => <div key={`${event.type}-${event.date?.getTime()}-${index}`} className="flex justify-between items-center gap-4 p-4 rounded-xl" style={{ background: "var(--surface-2)" }}><div className="flex items-center gap-3">{event.type === "in" ? <ArrowUpCircle size={18} style={{ color: "var(--success)" }}/> : <ArrowDownCircle size={18} style={{ color: "var(--danger)" }}/>}<div><b className="text-sm">{tx(event.reason)}</b><small className="block mt-1" style={{ color: "var(--text-muted)" }}>{dateLabel(event.date)}</small></div></div><b style={{ color: event.type === "in" ? "var(--success)" : "var(--danger)" }}>{event.type === "in" ? "+" : "−"}{event.qty}{tx("dona")}</b></div>)}{!historyEvents.length && <EmptyData icon={Package} text="Bu mahsulot bo'yicha harakatlar hali mavjud emas"/>}</div>}
         </div>
       </div>
       <Modal contentOnly open={isEditOpen} onClose={() => setIsEditOpen(false)} title={tx("Mahsulotni tahrirlash")} subtitle={tx("Mahsulot ma'lumotlarini yangilang")} icon={Package}>
@@ -765,8 +766,8 @@ export default function ProductDetail({ productId, onBack }) {
             <Field label={tx("SKU kodi")}><input className="input-base" value={editForm.sku || ""} onChange={(e) => setEditForm({ ...editForm, sku: e.target.value })} /></Field>
             <Field label={tx("Kategoriya")}><input className="input-base" value={editForm.category || ""} onChange={(e) => setEditForm({ ...editForm, category: e.target.value })} /></Field>
             <Field label={tx("Qoldiq")}><input type="number" min="0" className="input-base" value={editForm.stock ?? ""} onChange={(e) => setEditForm({ ...editForm, stock: e.target.value })} /></Field>
-            <Field label={tx("Sotuv narxi")}><input type="number" min="0" className="input-base" value={editForm.price ?? ""} onChange={(e) => setEditForm({ ...editForm, price: e.target.value })} /></Field>
-            <Field label={tx("Tan narxi")}><input type="number" min="0" className="input-base" value={editForm.cost ?? ""} onChange={(e) => setEditForm({ ...editForm, cost: e.target.value })} /></Field>
+            <Field label={tx("Sotuv narxi")}><input type="number" min="0" step="any" className="input-base" value={moneyInputValue(editForm.price, false)} onChange={(e) => setEditForm({ ...editForm, price: String(toBaseMoney(e.target.value)) })} /></Field>
+            <Field label={tx("Tan narxi")}><input type="number" min="0" step="any" className="input-base" value={moneyInputValue(editForm.cost, false)} onChange={(e) => setEditForm({ ...editForm, cost: String(toBaseMoney(e.target.value)) })} /></Field>
           </div>
           <div className="flex justify-end gap-2 pt-2"><button type="button" className="btn-ghost cursor-pointer" onClick={() => setIsEditOpen(false)}>{tx("Bekor qilish")}</button><button type="button" className="btn-primary cursor-pointer" onClick={saveEdit}><Edit2 size={15} />{tx("Saqlash")}</button></div>
         </div>

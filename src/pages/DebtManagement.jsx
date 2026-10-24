@@ -15,7 +15,9 @@ import {
 } from "lucide-react";
 import { readDebtPayments, readPosSales, withDebtBalance } from "../data/debtPayments";
 import { useToast } from "../context/ToastContext";
+import DateRangeFilter, { matchesDateRange } from "../components/DateRangeFilter";
 
+import { formatCurrency, moneyInputValue, toBaseMoney } from "../data/currency";
 const readBusinessList = (key) => {
   try {
     const value = JSON.parse(localStorage.getItem(key) || "[]");
@@ -77,7 +79,7 @@ function PaymentModal({ debtor, onClose, onPay }) {
                   color: "var(--danger)",
                 }}
               >
-                {tx(debtor.debt.toLocaleString())}{tx(" so'm")}</strong>
+                {formatCurrency(debtor.debt)}</strong>
             </p>
           </div>
           <button
@@ -126,7 +128,7 @@ function PaymentModal({ debtor, onClose, onPay }) {
                 color: "var(--text-muted)",
               }}
             >
-              {debtor.phone}
+              {tx(debtor.phone)}
             </div>
           </div>
         </div>
@@ -143,8 +145,9 @@ function PaymentModal({ debtor, onClose, onPay }) {
             <div className="relative">
               <input
                 type="number"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
+                step="any"
+                value={moneyInputValue(amount, false)}
+                onChange={(e) => setAmount(String(toBaseMoney(e.target.value)))}
                 className="input-base pr-16"
                 style={{
                   fontSize: 18,
@@ -180,7 +183,7 @@ function PaymentModal({ debtor, onClose, onPay }) {
                 >
                   {tx(i === 0 ? "To'liq" : i === 1 ? "50%" : "25%")}
                   <br />
-                  <span className="font-normal">{tx(p.toLocaleString())}</span>
+                  <span className="font-normal">{formatCurrency(p)}</span>
                 </button>
               ))}
             </div>
@@ -259,6 +262,8 @@ export default function DebtManagement({ onNavigate }) {
   const { success } = useToast();
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const [selected, setSelected] = useState(null);
   const [paid, setPaid] = useState({});
 
@@ -357,7 +362,7 @@ export default function DebtManagement({ onNavigate }) {
     setSelected(null);
     success(
       "To'lov qabul qilindi",
-      `${selected.name} — ${amount.toLocaleString()} so'm (${method})`,
+      `${selected.name} — ${formatCurrency(amount)} (${method})`,
     );
   };
 
@@ -369,7 +374,7 @@ export default function DebtManagement({ onNavigate }) {
       d.phone.includes(search);
     const matchFilter =
       filter === "all" ? true : filter === "overdue" ? d.overdue : !d.overdue;
-    return matchSearch && matchFilter;
+    return matchSearch && matchFilter && matchesDateRange(d.lastPurchase, dateFrom, dateTo);
   });
 
   const totalDebt = allDebts.reduce(
@@ -444,7 +449,7 @@ export default function DebtManagement({ onNavigate }) {
             fmt: false,
           },
         ].map((k) => (
-          <div key={k.label} className="debt-stat-card card p-4">
+          <div key={k.label} className={`debt-stat-card card p-4 ${k.label !== "Bugun to'landi" ? "debt-highlight" : ""}`}>
             <div className="flex items-center justify-between mb-3">
               <div
                 className="p-2.5 rounded-xl"
@@ -593,6 +598,8 @@ export default function DebtManagement({ onNavigate }) {
             ))}
           </div>
 
+          <DateRangeFilter from={dateFrom} to={dateTo} onFromChange={setDateFrom} onToChange={setDateTo} />
+
           <span
             className="text-xs ml-auto"
             style={{
@@ -730,7 +737,7 @@ export default function DebtManagement({ onNavigate }) {
                               color: "var(--text-secondary)",
                             }}
                           >
-                            {d.phone}
+                            {tx(d.phone)}
                           </span>
                           <a
                             href={"tel:" + d.phone.replace(/\s/g, "")}
@@ -768,7 +775,7 @@ export default function DebtManagement({ onNavigate }) {
                           color: "var(--text-primary)",
                         }}
                       >
-                        {tx((d.debt + d.paid).toLocaleString())}{tx(" so'm")}</td>
+                        {formatCurrency(d.debt + d.paid)}</td>
 
                       {/* Paid */}
                       <td className="px-5 py-4 whitespace-nowrap">
@@ -779,7 +786,7 @@ export default function DebtManagement({ onNavigate }) {
                               color: "var(--success)",
                             }}
                           >
-                            {tx(paidAmt.toLocaleString())}{tx(" so'm")}</div>
+                            {formatCurrency(paidAmt)}</div>
                           <div
                             className="w-20 h-1 rounded-full mt-1.5 overflow-hidden"
                             style={{
@@ -804,7 +811,7 @@ export default function DebtManagement({ onNavigate }) {
                           color: "var(--danger)",
                         }}
                       >
-                        {tx(remaining.toLocaleString())}{tx(" so'm")}</td>
+                        {formatCurrency(remaining)}</td>
 
                       {/* Due date - Yonma-yon va bir qatorda */}
                       <td className="px-5 py-4 whitespace-nowrap">

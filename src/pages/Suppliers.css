@@ -253,11 +253,32 @@
 }
 
 @media (max-width: 700px) {
+  .supplier-page-heading { position: relative; align-items: flex-start; }
+  .supplier-page-heading > div:first-child { max-width: calc(100% - 112px); }
+  .supplier-heading-actions { display: contents; }
+  .supplier-add-product-btn,
+  .supplier-add-person-btn {
+    position: absolute;
+    display: inline-flex;
+    width: 52px;
+    height: 52px;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    padding: 0;
+    border-radius: 12px;
+  }
+  .supplier-add-product-btn { top: -46px; right: 60px; }
+  .supplier-add-person-btn { top: -46px; right: 0; }
+  .supplier-add-product-btn span,
+  .supplier-add-person-btn span { display: none; }
+  .supplier-add-product-btn svg,
+  .supplier-add-person-btn svg { width: 28px; height: 28px; }
+
   .suppliers-stats {
     grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
     gap: 10px;
   }
-
 
   .supplier-stat-card {
     min-width: 0;
@@ -276,4 +297,47 @@
   .suppliers-table-scroll:active {
     cursor: grabbing;
   }
+}
+
+.supplier-receipt-confirm { display: grid; gap: 16px; }
+.supplier-receipt-heading { display: grid; gap: 5px; }
+.supplier-receipt-heading strong { font-size: 18px; overflow-wrap: anywhere; }
+.supplier-receipt-heading time, .supplier-receipt-items small { color: var(--text-muted); font-size: 12px; }
+.supplier-receipt-items { max-height: 190px; overflow-y: auto; border: 1px solid var(--border); border-radius: 12px; }
+.supplier-receipt-items > div { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 11px 13px; }
+.supplier-receipt-items > div + div { border-top: 1px solid var(--border-subtle); }
+.supplier-receipt-items span { display: grid; gap: 4px; min-width: 0; overflow-wrap: anywhere; }
+.supplier-receipt-items strong { text-align: right; font-size: 13px; }
+.supplier-receipt-totals { margin: 0; padding: 14px; border-radius: 12px; background: var(--input-bg); display: grid; gap: 12px; }
+.supplier-receipt-totals > div { display: flex; justify-content: space-between; gap: 12px; }
+.supplier-receipt-totals dt { color: var(--text-muted); font-size: 13px; }
+.supplier-receipt-totals dd { margin: 0; text-align: right; font-weight: 700; }
+.supplier-receipt-totals .receipt-cash dd { color: var(--success); }
+.supplier-receipt-totals .receipt-debt { padding: 10px; border-radius: 8px; background: var(--danger-light); }
+.supplier-receipt-totals .receipt-debt :is(dt, dd) { color: var(--danger); }
+.supplier-receipt-question { margin: 0; font-size: 13px; line-height: 1.6; color: var(--text-secondary); }
+.supplier-receipt-buttons { display: flex; flex-wrap: wrap; gap: 10px; }
+.supplier-receipt-buttons button { flex: 1; justify-content: center; }
+
+.supplier-learned-input { position: relative; }
+.supplier-learned-options { position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 8; max-height: 180px; overflow-y: auto; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow-md); }
+.supplier-learned-options button { display: block; width: 100%; padding: 10px 12px; border: 0; text-align: left; background: transparent; color: var(--text-primary); cursor: pointer; }
+.supplier-learned-options button:hover { background: var(--input-bg); }
+
+.supplier-product-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.supplier-product-name-input { position: relative; }
+.supplier-product-name-input .supplier-learned-options { top: calc(100% + 4px); }
+.supplier-money-input { position: relative; }
+.supplier-money-input .input-base { padding-right: 58px; font-variant-numeric: tabular-nums; }
+.supplier-money-input > span { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); color: var(--text-muted); font-size: 13px; pointer-events: none; }
+.supplier-receipt-payment-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: end; gap: 10px; }
+.supplier-receipt-payment-total { min-height: 43px; padding: 12px; border-radius: 12px; background: var(--surface-2); }
+.supplier-receipt-payment-total small { display: block; color: var(--text-muted); }
+.supplier-receipt-payment-total b { display: block; margin-top: 4px; color: var(--text-primary); overflow-wrap: anywhere; }
+.supplier-receipt-cash b { color: var(--success); }
+.supplier-form-help { margin: -10px 0 0; color: var(--text-muted); font-size: 12px; }
+
+@media (max-width: 640px) {
+  .supplier-product-fields { grid-template-columns: minmax(0, 1fr); }
+  .supplier-receipt-payment-grid { grid-template-columns: minmax(0, 1fr); }
 }

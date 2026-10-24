@@ -1,11 +1,13 @@
+import SalesProductFilter from "../components/SalesProductFilter";
+import { saleMatchesProduct } from "../data/salesProductFilter";
+import "./Sales.css";
 import { translateText as tx } from "../locales/translateText";
 import { useLanguage as useUILanguage } from "../context/LanguageContext";
 import "./Products.css";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 
 import {
-  Search,
   Download,
   Eye,
   Edit2,
@@ -20,6 +22,9 @@ import {
 import { products as initialProducts, suppliers as supplierSeed } from "../data/mockData";
 import { useToast } from "../context/ToastContext";
 import { useLanguage } from "../context/LanguageContext";
+import { downloadCsv } from "../utils/csv";
+import { formatCurrency, moneyInputValue, toBaseMoney } from "../data/currency";
+import { reservedQuantities } from "../data/ordersStore";
 
 export default function Products({ onNavigate }) {
   useUILanguage();
@@ -77,7 +82,15 @@ export default function Products({ onNavigate }) {
         return Array.isArray(saved) ? saved : initialProducts;
       } catch { return initialProducts; }
     });
+  const [reservedStock, setReservedStock] = useState(reservedQuantities);
+  useEffect(() => {
+    const refresh = () => setReservedStock(reservedQuantities());
+    window.addEventListener("crm-orders-updated", refresh);
+    window.addEventListener("storage", refresh);
+    return () => { window.removeEventListener("crm-orders-updated", refresh); window.removeEventListener("storage", refresh); };
+  }, []);
 
+  const [categoryFilter, setCategoryFilter] = useState({ category: "", product: null, query: "" });
   const [searchInput, setSearchInput] =
     useState("");
 
@@ -86,6 +99,7 @@ export default function Products({ onNavigate }) {
 
   const [editingProduct, setEditingProduct] =
     useState(null);
+  const [showCategories, setShowCategories] = useState(false);
 
   const [deleteTarget, setDeleteTarget] =
     useState(null);
@@ -110,6 +124,13 @@ export default function Products({ onNavigate }) {
   const [formData, setFormData] =
     useState(emptyForm);
 
+  const categories = [...new Set([
+    ...productList.map((product) => String(product.category || "").trim()).filter(Boolean),
+    "Elektronika", "Maishiy texnika", "Kiyim", "Oziq-ovqat",
+  ])].sort((a, b) => a.localeCompare(b, "uz"));
+  const categoryMatches = categories.filter((category) => !formData.category || category.toLocaleLowerCase("uz-UZ").includes(formData.category.toLocaleLowerCase("uz-UZ")));
+  const setCategory = (value) => setFormData({ ...formData, category: value.replace(/^\p{L}/u, (letter) => letter.toLocaleUpperCase("uz-UZ")) });
+
   const countryByBrand = {
     Ariel: "AQSH",
     Tefal: "Fransiya",
@@ -128,6 +149,7 @@ export default function Products({ onNavigate }) {
   const filtered = productList
     .filter((p) => {
       const q = searchInput.trim().toLocaleLowerCase("uz");
+      if (!saleMatchesProduct({ items: [p] }, productList, categoryFilter)) return false;
       if (!q) return true;
 
       const searchableValues = [
@@ -156,97 +178,20 @@ export default function Products({ onNavigate }) {
   const handleExportExcel = () => {
     try {
       const headers = [
-        [
-          "№",
-          t(
-            "products.form.name",
-            "Mahsulot nomi"
-          ),
-          t(
-            "products.form.brand",
-            "Brend"
-          ),
-          t(
-            "products.table.category",
-            "Kategoriya"
-          ),
-          t(
-            "products.table.sellPrice",
-            "Sotuv narxi"
-          ),
-          t(
-            "products.table.costPrice",
-            "Tan narxi"
-          ),
-          t(
-            "products.table.stock",
-            "Qoldiq"
-          ),
-          t(
-            "products.table.status",
-            "Holati"
-          ),
-        ].join(",") + "\n",
+        "№", t("products.form.name", "Mahsulot nomi"), t("products.form.brand", "Brend"),
+        t("products.table.category", "Kategoriya"), t("products.table.sellPrice", "Sotuv narxi"),
+        t("products.table.costPrice", "Tan narxi"), t("products.table.stock", "Qoldiq"),
+        t("products.table.status", "Holati"),
       ];
-
-      const rows =
-        filtered.map(
-          (p, index) =>
-            [
-              index + 1,
-              `"${p.name || ""}"`,
-              `"${p.brand || "-"}"`,
-              `"${tx(p.category || "")}"`,
-              p.price || 0,
-              p.cost || 0,
-              p.stock || 0,
-              `"${statusMap[p.status]?.label || "Faol"}"`,
-            ].join(",")
-        );
-
-      const csvContent =
-        "\uFEFF" +
-        headers
-          .concat(rows)
-          .join("\n");
-
-      const blob = new Blob(
-        [csvContent],
-        {
-          type:
-            "text/csv;charset=utf-8;",
-        }
-      );
-
-      const url =
-        URL.createObjectURL(blob);
-
-      const link =
-        document.createElement("a");
-
-      link.href = url;
-      link.download =
-        "Mahsulotlar_Royxati.csv";
-
-      document.body.appendChild(link);
-
-      link.click();
-
-      document.body.removeChild(link);
-
-      URL.revokeObjectURL(url);
-
-      success(
-        t(
-          "products.toast.exported",
-          "Excel fayli muvaffaqiyatli yuklab olindi!"
-        )
-      );
-    } catch (error) {
-      console.error(
-        "Export xatoligi:",
-        error
-      );
+      const rows = filtered.map((product, index) => [
+        index + 1, product.name, product.brand || "-", tx(product.category || ""),
+        product.price || 0, product.cost || 0, product.stock || 0,
+        statusMap[product.status]?.label || "Faol",
+      ]);
+      downloadCsv([headers, ...rows], "Mahsulotlar_Royxati.csv");
+      success(t("products.toast.exported", "Excel fayli muvaffaqiyatli yuklab olindi!"));
+    } catch (exportError) {
+      console.error("Export xatoligi:", exportError);
     }
   };
 
@@ -491,7 +436,7 @@ export default function Products({ onNavigate }) {
               "Jami qiymat"
             ),
             value:
-              `${productList.reduce((total, product) => total + (Number(product.stock) || 0) * (Number(product.cost) || 0), 0).toLocaleString()} so'm`,
+              formatCurrency(productList.reduce((total, product) => total + (Number(product.stock) || 0) * (Number(product.cost) || 0), 0)),
             color:
               "var(--violet)",
           },
@@ -552,7 +497,7 @@ export default function Products({ onNavigate }) {
           TABLE
       ================================================= */}
 
-      <div className="products-list-card card-flat rounded-2xl overflow-hidden">
+      <div className="products-list-card card-flat rounded-2xl">
 
         {/* TOOLBAR */}
 
@@ -563,16 +508,11 @@ export default function Products({ onNavigate }) {
 
           <div className="search-box-wrapper products-search-field flex items-center gap-2 rounded-xl px-3 py-2.5">
 
-            <Search
-              size={14}
-              className="text-faint-color"
-            />
-
             <input
               value={searchInput}
               onChange={(e) =>
                 setSearchInput(
-                  e.target.value
+                  e.target.value.replace(/(^|\s)(\S)/g, (_, space, letter) => space + letter.toLocaleUpperCase("uz-UZ"))
                 )
               }
               placeholder={tx(t(
@@ -586,14 +526,7 @@ export default function Products({ onNavigate }) {
 
           </div>
 
-          <button
-            type="submit"
-            className="products-search-submit"
-            aria-label={tx("Qidirish")}
-            title={tx("Qidirish")}
-          >
-            <Search size={18} />
-          </button>
+          <SalesProductFilter products={productList} value={categoryFilter} onChange={setCategoryFilter} placeholder="Kategoriya..." />
 
         </form>
 
@@ -659,6 +592,7 @@ export default function Products({ onNavigate }) {
                   product.status
                   ] ||
                   statusMap.active;
+                const reserved = Number(reservedStock[String(product.id)] || 0);
 
                 return (
                   <tr
@@ -711,14 +645,7 @@ export default function Products({ onNavigate }) {
 
                     <td className="px-5 py-3.5 text-sm font-semibold text-primary-color">
 
-                      {tx(Number(
-                        product.price
-                      ).toLocaleString())}{" "}
-
-                      {tx(t(
-                        "products.currency",
-                        "so'm"
-                      ))}
+                      {formatCurrency(product.price)}
 
                     </td>
 
@@ -726,14 +653,7 @@ export default function Products({ onNavigate }) {
 
                     <td className="px-5 py-3.5 text-sm text-secondary-color">
 
-                      {tx(Number(
-                        product.cost
-                      ).toLocaleString())}{" "}
-
-                      {tx(t(
-                        "products.currency",
-                        "so'm"
-                      ))}
+                      {formatCurrency(product.cost)}
 
                     </td>
 
@@ -741,6 +661,7 @@ export default function Products({ onNavigate }) {
 
                     <td className="px-5 py-3.5">
 
+                      <div className="flex flex-col items-start gap-1">
                       <div className="flex items-center gap-2">
 
                         <div className="products-stock-track">
@@ -774,6 +695,8 @@ export default function Products({ onNavigate }) {
                           }{tx(product.measurementType === "weight" ? " kg" : product.measurementType === "count" ? " dona" : "")}
                         </span>
 
+                      </div>
+                      {reserved > 0 && <span className="text-xs font-semibold" style={{ color: "var(--warning)" }}>{tx("Band qilingan")}: {tx(reserved)} {tx(product.measurementType === "weight" ? "kg" : "dona")}</span>}
                       </div>
 
                     </td>
@@ -1109,30 +1032,20 @@ export default function Products({ onNavigate }) {
 
                   <label className="block text-xs font-semibold mb-1.5 text-secondary-color">{tx("Kategoriya")}</label>
 
-                  <select
-                    value={
-                      formData.category
-                    }
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        category:
-                          e.target
-                            .value,
-                      })
-                    }
-                    className="input-base cursor-pointer"
-                  >
-
-                    <option value="Elektronika">{tx("Elektronika")}</option>
-
-                    <option value="Maishiy texnika">{tx("Maishiy texnika")}</option>
-
-                    <option value="Kiyim">{tx("Kiyim")}</option>
-
-                    <option value="Oziq-ovqat">{tx("Oziq-ovqat")}</option>
-
-                  </select>
+                  <div className="relative">
+                    <input
+                      value={formData.category}
+                      onFocus={() => setShowCategories(true)}
+                      onChange={(e) => setCategory(e.target.value)}
+                      onBlur={() => setTimeout(() => setShowCategories(false), 120)}
+                      placeholder={tx("Kategoriya nomini yozing yoki tanlang")}
+                      className="input-base"
+                    />
+                    {showCategories && <div className="absolute z-20 top-full left-0 right-0 mt-1 p-1 rounded-xl max-h-44 overflow-y-auto" style={{ background: "var(--surface)", border: "1px solid var(--border)", boxShadow: "var(--shadow-md)" }}>
+                      {categoryMatches.map((category) => <button type="button" key={category} onMouseDown={(e) => e.preventDefault()} onClick={() => { setCategory(category); setShowCategories(false); }} className="block w-full text-left px-3 py-2 rounded-lg text-sm hover:bg-slate-50">{category}</button>)}
+                      {!categoryMatches.some((category) => category.toLocaleLowerCase("uz-UZ") === formData.category.trim().toLocaleLowerCase("uz-UZ")) && formData.category.trim() && <div className="px-3 py-2 text-xs" style={{ color: "var(--brand)" }}>{tx("Yangi kategoriya sifatida qo'shiladi")}: {formData.category}</div>}
+                    </div>}
+                  </div>
 
                 </div>
 
@@ -1179,15 +1092,11 @@ export default function Products({ onNavigate }) {
                     type="number"
                     required
                     min="0"
-                    value={
-                      formData.price
-                    }
+                    value={moneyInputValue(formData.price, false)}
                     onChange={(e) =>
                       setFormData({
                         ...formData,
-                        price:
-                          e.target
-                            .value,
+                        price: String(toBaseMoney(e.target.value)),
                       })
                     }
                     placeholder={tx("0")}
@@ -1205,15 +1114,11 @@ export default function Products({ onNavigate }) {
                     type="number"
                     required
                     min="0"
-                    value={
-                      formData.cost
-                    }
+                    value={moneyInputValue(formData.cost, false)}
                     onChange={(e) =>
                       setFormData({
                         ...formData,
-                        cost:
-                          e.target
-                            .value,
+                        cost: String(toBaseMoney(e.target.value)),
                       })
                     }
                     placeholder={tx("0")}

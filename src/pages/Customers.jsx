@@ -17,6 +17,21 @@ import {
 } from "lucide-react";
 import { customers as initialCustomers } from "../data/mockData";
 import { useToast } from "../context/ToastContext";
+import PhoneInput from "../components/PhoneInput";
+import { uzbekRegions } from "../data/regions";
+
+import { formatCurrency } from "../data/currency";
+const formatName = (value) => value
+  .replace(/[^\p{L}\s'ʻʼ’‘-]/gu, "")
+  .replace(/\s+/g, " ")
+  .replace(/(^|\s)(\p{L})/gu, (_, space, letter) => space + letter.toLocaleUpperCase("uz-UZ"));
+
+const putSurnameLast = (value) => {
+  const parts = value.trim().split(/\s+/).filter(Boolean);
+  const index = parts.findIndex((part) => /(?:ov|ova|ev|eva|yev|yeva)$/iu.test(part));
+  if (index >= 0 && index < parts.length - 1) parts.push(parts.splice(index, 1)[0]);
+  return parts.join(" ");
+};
 
 const statusMap = {
   vip: {
@@ -92,6 +107,7 @@ export default function Customers({ filter, onNavigate }) {
   const pageRef = useRef(null);
   const toastContext = useToast();
   const success = toastContext?.success || (() => { });
+  const error = toastContext?.error || (() => { });
 
   // Mijozlar ro'yxatini LocalStorage dan o'qib olish
   const [customerList, setCustomerList] = useState(() => {
@@ -123,9 +139,8 @@ export default function Customers({ filter, onNavigate }) {
   const [formData, setFormData] = useState({
     name: "",
     phone: "",
-    region: "Toshkent",
+    region: "Toshkent shahri",
     status: "regular",
-    debt: 0,
   });
 
   const handleInputChange = (e) => {
@@ -140,17 +155,25 @@ export default function Customers({ filter, onNavigate }) {
   const handleAddCustomer = (e) => {
     e.preventDefault();
 
-    if (!formData.name.trim() || !formData.phone.trim()) return;
+    const phoneDigits = formData.phone.replace(/\D/g, "");
+    if (!/\p{L}/u.test(formData.name)) {
+      error("Ismni tekshiring", "Ism va familiyada harflardan foydalaning.");
+      return;
+    }
+    if (!phoneDigits.startsWith("998") || phoneDigits.length !== 12) {
+      error("Telefon raqamini tekshiring", "+998 dan keyin 9 ta raqam kiriting.");
+      return;
+    }
 
     const newCustomer = {
       id: Date.now(),
-      name: formData.name.trim(),
+      name: putSurnameLast(formData.name),
       phone: formData.phone.trim(),
       region: formData.region,
       status: formData.status,
       purchases: 0,
       spent: 0,
-      debt: Number(formData.debt) || 0,
+      debt: 0,
       lastPurchase: "Hali xarid qilmadi",
     };
 
@@ -162,9 +185,8 @@ export default function Customers({ filter, onNavigate }) {
     setFormData({
       name: "",
       phone: "",
-      region: "Toshkent",
+      region: "Toshkent shahri",
       status: "regular",
-      debt: 0,
     });
 
     success("Yangi mijoz muvaffaqiyatli saqlandi!");
@@ -261,13 +283,13 @@ export default function Customers({ filter, onNavigate }) {
           },
           {
             label: "Jami qarzdorlik",
-            value: (totalDebt / 1000000).toFixed(2) + " mln so'm",
+            value: formatCurrency(totalDebt),
             icon: CreditCard,
             color: "var(--warning)",
             bg: "var(--warning-light)",
           },
         ].map((s) => (
-          <div key={s.label} className="customers-stat">
+          <div key={s.label} className={`customers-stat ${s.label.includes("arz") ? "debt-highlight" : ""}`}>
             <div
               className="customers-stat__icon"
               style={{ background: s.bg, color: s.color }}
@@ -450,7 +472,7 @@ export default function Customers({ filter, onNavigate }) {
                         className="px-5 py-3.5 text-sm font-semibold"
                         style={{ color: "var(--text-primary)" }}
                       >
-                        {tx(Number(c.spent || 0).toLocaleString())}{tx(" so'm")}</td>
+                        {formatCurrency(Number(c.spent || 0))}</td>
 
                       {/* Qarzdorlik */}
                       <td className="px-5 py-3.5">
@@ -459,7 +481,7 @@ export default function Customers({ filter, onNavigate }) {
                             className="text-sm font-semibold"
                             style={{ color: "var(--danger)" }}
                           >
-                            {tx(Number(c.debt).toLocaleString())}{tx(" so'm")}</span>
+                            {formatCurrency(Number(c.debt))}</span>
                         ) : (
                           <span
                             className="text-sm"
@@ -576,7 +598,9 @@ export default function Customers({ filter, onNavigate }) {
                   required
                   placeholder={tx("Masalan: Ali Valiyev")}
                   value={formData.name}
-                  onChange={handleInputChange}
+                  onChange={(event) => setFormData((prev) => ({ ...prev, name: formatName(event.target.value) }))}
+                  autoComplete="name"
+                  autoCapitalize="words"
                   className="w-full px-3.5 py-2.5 text-sm rounded-xl outline-none transition-all"
                   style={{
                     background: "var(--input-bg)",
@@ -588,13 +612,12 @@ export default function Customers({ filter, onNavigate }) {
 
               <div>
                 <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--text-secondary)" }}>{tx("Telefon raqami *")}</label>
-                <input
-                  type="text"
+                <PhoneInput
                   name="phone"
                   required
-                  placeholder={tx("+998 90 123 45 67")}
+                  placeholder="+998 90 123 45 67"
                   value={formData.phone}
-                  onChange={handleInputChange}
+                  onChange={(phone) => setFormData((prev) => ({ ...prev, phone }))}
                   className="w-full px-3.5 py-2.5 text-sm rounded-xl outline-none transition-all font-mono"
                   style={{
                     background: "var(--input-bg)",
@@ -618,14 +641,7 @@ export default function Customers({ filter, onNavigate }) {
                       color: "var(--text-primary)",
                     }}
                   >
-                    <option value="Toshkent">{tx("Toshkent")}</option>
-                    <option value="Samarqand">{tx("Samarqand")}</option>
-                    <option value="Farg'ona">{tx("Farg'ona")}</option>
-                    <option value="Andijon">{tx("Andijon")}</option>
-                    <option value="Namangan">{tx("Namangan")}</option>
-                    <option value="Buxoro">{tx("Buxoro")}</option>
-                    <option value="Xorazm">{tx("Xorazm")}</option>
-                    <option value="Boshqa">{tx("Boshqa")}</option>
+                    {uzbekRegions.map((region) => <option key={region} value={region}>{tx(region)}</option>)}
                   </select>
                 </div>
 
@@ -648,23 +664,6 @@ export default function Customers({ filter, onNavigate }) {
                     <option value="debtor">{tx("Qarzdor")}</option>
                   </select>
                 </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--text-secondary)" }}>{tx("Boshlang'ich qarzdorlik (so'mda)")}</label>
-                <input
-                  type="number"
-                  name="debt"
-                  placeholder={tx("0")}
-                  value={formData.debt}
-                  onChange={handleInputChange}
-                  className="w-full px-3.5 py-2.5 text-sm rounded-xl outline-none transition-all"
-                  style={{
-                    background: "var(--input-bg)",
-                    border: "1px solid var(--border)",
-                    color: "var(--text-primary)",
-                  }}
-                />
               </div>
 
               <div className="flex items-center justify-end gap-3 pt-4 mt-2 border-t border-[var(--border-subtle)]">

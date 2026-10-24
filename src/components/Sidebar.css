@@ -362,18 +362,18 @@
 }
 
 .help-card-icon.blue {
-  background-color: #eff6ff;
-  color: #2563eb;
+  background-color: var(--brand-light);
+  color: var(--brand);
 }
 
 .help-card-icon.green {
-  background-color: #ecfdf5;
-  color: #10b981;
+  background-color: var(--success-light);
+  color: var(--success);
 }
 
 .help-card-icon.orange {
-  background-color: #fff7ed;
-  color: #f97316;
+  background-color: var(--warning-light);
+  color: var(--warning);
 }
 
 .help-card-info {

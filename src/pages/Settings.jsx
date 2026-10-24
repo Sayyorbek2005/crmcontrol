@@ -1,13 +1,17 @@
+import DirectorCardsSettings from "../components/DirectorCardsSettings";
+import PhoneInput from "../components/PhoneInput";
 import { translateText as tx } from "../locales/translateText";
 import { useLanguage as useUILanguage } from "../context/LanguageContext";
 import './Settings.css';
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { User, Palette, Lock, Sun, Moon } from "lucide-react";
 import { useTheme } from "../context/ThemeContext";
 import { useToast } from "../context/ToastContext";
 import { getDirector, updateDirectorCredentials } from "../data/accessStore";
+import { LOGIN_SCOPES, useLoginLock } from "../data/loginThrottle";
 import { profileInitials, readProfile, saveProfile } from "../data/profileStore";
 import ConfirmDialog from "../components/ConfirmDialog";
+import { getCurrencySettings, saveCurrencySettings } from "../data/currency";
 
 const sections = [
   {
@@ -27,22 +31,18 @@ const sections = [
   },
 ];
 
-const formatUzPhone = (value) => {
-  const digits = String(value || "").replace(/\D/g, "");
-  const localDigits = (digits.startsWith("998") ? digits.slice(3) : digits).slice(0, 9);
-  return value || localDigits ? `+998${localDigits}` : "";
-};
+const capitalizeName = (value) => String(value || "").replace(/(^|[\s-])(\p{L})/gu, (_, separator, letter) => separator + letter.toLocaleUpperCase("uz-UZ"));
 
-const InputRow = ({ label, value, onChange, onFocus, type = "text", placeholder, inputMode, maxLength }) => (
-  <div>
-    <label
+const InputRow = ({ label, value, onChange, onFocus, type = "text", placeholder, inputMode, maxLength, autoComplete, autoCapitalize }) => (
+  <label>
+    <span
       className="block text-xs font-semibold mb-1.5"
       style={{
         color: "var(--text-secondary)",
       }}
     >
       {tx(label)}
-    </label>
+    </span>
     <input
       type={type}
       value={value}
@@ -51,9 +51,11 @@ const InputRow = ({ label, value, onChange, onFocus, type = "text", placeholder,
       placeholder={tx(placeholder)}
       inputMode={inputMode}
       maxLength={maxLength}
+      autoComplete={autoComplete}
+      autoCapitalize={autoCapitalize}
       className="input-base"
     />
-  </div>
+  </label>
 );
 
 const Toggle = ({ label, desc, defaultOn }) => {
@@ -110,22 +112,25 @@ function ProfileContent({ user, onProfileSaved }) {
   const { success, error } = useToast();
   const [profile, setProfile] = useState(() => {
     const saved = readProfile(user);
-    return { ...saved, phone: formatUzPhone(saved.phone) };
+    return { ...saved, firstName: capitalizeName(saved.firstName), lastName: capitalizeName(saved.lastName), phone: saved.phone || "" };
   });
 
-  const updateField = (field) => (event) => setProfile((current) => ({ ...current, [field]: event.target.value }));
-  const updatePhone = (event) => setProfile((current) => ({ ...current, phone: formatUzPhone(event.target.value) }));
+  const updateField = (field) => (event) => setProfile((current) => ({ ...current, [field]: ["firstName", "lastName"].includes(field) ? capitalizeName(event.target.value) : event.target.value }));
+  const updatePhone = (value) => setProfile((current) => ({ ...current, phone: value }));
 
   const handleSave = () => {
     if (!profile.firstName.trim()) {
       error("Ismni kiriting");
       return;
     }
-    if (profile.phone && !/^\+998\d{9}$/.test(profile.phone)) {
+    const phoneDigits = String(profile.phone || "").replace(/\D/g, "");
+    const phone = !phoneDigits || phoneDigits === "998" ? "" : `+${phoneDigits}`;
+    if (phone && !/^\+998\d{9}$/.test(phone)) {
       error("Telefon raqamni tekshiring", "+998 dan keyin 9 ta raqam kiriting.");
       return;
     }
     const saved = Object.fromEntries(Object.entries(profile).map(([key, value]) => [key, typeof value === "string" ? value.trim() : value]));
+    saved.phone = phone;
     try {
       saveProfile(user, saved);
       setProfile(saved);
@@ -147,11 +152,12 @@ function ProfileContent({ user, onProfileSaved }) {
       </div>
 
       <div className="grid grid-cols-2 gap-4">
-        <InputRow label={tx("Ism")} value={profile.firstName || ""} onChange={updateField("firstName")} />
-        <InputRow label={tx("Familiya")} value={profile.lastName || ""} onChange={updateField("lastName")} />
-        <InputRow label={tx("Telefon")} value={profile.phone || ""} onChange={updatePhone}
-          onFocus={() => setProfile((current) => ({ ...current, phone: current.phone || "+998" }))}
-          type="tel" inputMode="numeric" maxLength={13} placeholder={tx("+998")} />
+        <InputRow label={tx("Ism")} value={profile.firstName || ""} onChange={updateField("firstName")} autoComplete="given-name" autoCapitalize="words" />
+        <InputRow label={tx("Familiya")} value={profile.lastName || ""} onChange={updateField("lastName")} autoComplete="family-name" autoCapitalize="words" />
+        <label>
+          <span className="block text-xs font-semibold mb-1.5" style={{ color: "var(--text-secondary)" }}>{tx("Telefon")}</span>
+          <PhoneInput value={profile.phone || ""} onChange={updatePhone} autoComplete="tel" />
+        </label>
         <InputRow label={tx("Email")} value={profile.email || ""} onChange={updateField("email")} type="email" />
       </div>
       <InputRow label={tx("Lavozim")} value={profile.position || ""} onChange={updateField("position")} />
@@ -162,6 +168,7 @@ function ProfileContent({ user, onProfileSaved }) {
           className="btn-primary"
         >{tx("Saqlash")}</button>
       </div>
+      {user?.type === "director" && <DirectorCardsSettings user={user} />}
     </div>
   );
 }
@@ -170,6 +177,20 @@ function AppearanceContent() {
   useUILanguage();
   const { dark, toggle } = useTheme();
   const { success } = useToast();
+  const [currencySettings, setCurrencySettings] = useState(getCurrencySettings);
+  useEffect(() => {
+    const sync = () => setCurrencySettings(getCurrencySettings());
+    window.addEventListener("crm-currency-change", sync);
+    return () => window.removeEventListener("crm-currency-change", sync);
+  }, []);
+  const toggleCurrency = (code) => {
+    const enabled = currencySettings.enabled.includes(code)
+      ? currencySettings.enabled.filter((item) => item !== code)
+      : [...currencySettings.enabled, code];
+    if (!enabled.length) return;
+    setCurrencySettings(saveCurrencySettings({ ...currencySettings, enabled }));
+    success(enabled.includes(code) ? `${code} ${tx("yoqildi")}` : `${code} ${tx("o'chirildi")}`);
+  };
 
   return (
     <div className="space-y-6">
@@ -237,6 +258,29 @@ function AppearanceContent() {
         </div>
       </div>
 
+      <section style={{ borderTop: "1px solid var(--border-subtle)", paddingTop: 20 }}>
+        <div className="mb-3">
+          <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>{tx("Pul birliklari")}</h3>
+          <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>{tx("Yoqilgan valyutalar headerda tanlash uchun ko'rinadi.")}</p>
+        </div>
+        <div className="grid sm:grid-cols-2 gap-3">
+          {[
+            { code: "UZS", title: "So'm (UZS)", description: "O'zbekiston so'mi" },
+            { code: "USD", title: "AQSH dollari (USD)", description: currencySettings.usdRate ? `1 USD = ${currencySettings.usdRate.toLocaleString("en-US")} UZS` : "USD kursini tanlashda kiritasiz" },
+          ].map(({ code, title, description }) => {
+            const enabled = currencySettings.enabled.includes(code);
+            const onlyEnabled = enabled && currencySettings.enabled.length === 1;
+            const needsUsdRate = code === "UZS" && enabled && currencySettings.enabled.includes("USD") && !currencySettings.usdRate;
+            return <div key={code} className="flex items-center justify-between gap-3 rounded-xl p-3" style={{ border: "1px solid var(--border)", background: "var(--surface-2)" }}>
+              <div><div className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>{tx(title)}</div><div className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>{tx(description)}</div></div>
+              <button type="button" role="switch" aria-checked={enabled} aria-label={`${tx(title)} ${tx("valyutasini yoqish yoki o'chirish")}`} title={needsUsdRate ? tx("USD kursini kiriting, keyin so'mni o'chirishingiz mumkin") : undefined} disabled={onlyEnabled || needsUsdRate} onClick={() => toggleCurrency(code)} className="relative shrink-0 transition-all disabled:opacity-50" style={{ width: 42, height: 24, borderRadius: 99, border: 0, background: enabled ? "var(--brand)" : "var(--border)" }}>
+                <span className="absolute top-0.5 w-5 h-5 bg-white rounded-full shadow-sm transition-all" style={{ left: enabled ? "calc(100% - 22px)" : 2 }} />
+              </button>
+            </div>;
+          })}
+        </div>
+      </section>
+
       <button
         onClick={() => success("Sozlamalar saqlandi")}
         className="btn-primary"
@@ -254,6 +298,7 @@ function SecurityContent({ user }) {
   const [confirmation, setConfirmation] = useState("");
   const [message, setMessage] = useState("");
   const [passwordConfirmOpen, setPasswordConfirmOpen] = useState(false);
+  const lock = useLoginLock(LOGIN_SCOPES.settings);
 
   const commitCredentials = async () => {
     setPasswordConfirmOpen(false);
@@ -265,11 +310,14 @@ function SecurityContent({ user }) {
       success("Direktor hisob ma'lumotlari saqlandi");
     } catch (error) {
       setMessage(error.message || "Hisobni yangilab bo'lmadi.");
+    } finally {
+      lock.refresh();
     }
   };
 
   const saveCredentials = (event) => {
     event.preventDefault();
+    if (lock.locked) return;
     setMessage("");
     if (user?.type !== "director") return;
     if (newPassword !== confirmation) {
@@ -290,14 +338,14 @@ function SecurityContent({ user }) {
       <p className="text-sm" style={{ color: "var(--text-muted)" }}>{tx("Login yoki parolni alohida yangilashingiz mumkin. Tasdiqlash uchun hozirgi parolni kiriting.")}</p>
       <label className="block text-sm font-semibold">{tx("Yangi login")}<input className="input-base mt-1.5" value={login} onChange={(event) => setLogin(event.target.value)} autoComplete="username" />
       </label>
-      <label className="block text-sm font-semibold">{tx("Hozirgi parol")}<input className="input-base mt-1.5" type="text" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} autoComplete="off" required />
+      <label className="block text-sm font-semibold">{tx("Hozirgi parol")}<input className="input-base mt-1.5" type="password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} autoComplete="current-password" required />
       </label>
-      <label className="block text-sm font-semibold">{tx("Yangi parol (ixtiyoriy)")}<input className="input-base mt-1.5" type="text" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} autoComplete="off" />
+      <label className="block text-sm font-semibold">{tx("Yangi parol (ixtiyoriy)")}<input className="input-base mt-1.5" type="password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} autoComplete="new-password" />
       </label>
-      <label className="block text-sm font-semibold">{tx("Yangi parolni tasdiqlang")}<input className="input-base mt-1.5" type="text" value={confirmation} onChange={(event) => setConfirmation(event.target.value)} autoComplete="off" />
+      <label className="block text-sm font-semibold">{tx("Yangi parolni tasdiqlang")}<input className="input-base mt-1.5" type="password" value={confirmation} onChange={(event) => setConfirmation(event.target.value)} autoComplete="new-password" />
       </label>
       {message && <p role="alert" className="text-sm" style={{ color: "var(--danger, #ef4444)" }}>{tx(message)}</p>}
-      <div className="flex justify-end"><button type="submit" className="btn-primary">{tx("Saqlash")}</button></div>
+      <div className="flex justify-end"><button type="submit" className="btn-primary" disabled={lock.locked} aria-live="polite" style={lock.locked ? { opacity: 0.6, cursor: "not-allowed" } : undefined}>{lock.locked ? <>{tx("Qayta urinish")}: <span style={{ fontVariantNumeric: "tabular-nums" }}>{lock.label}</span></> : tx("Saqlash")}</button></div>
     </form>
     <ConfirmDialog
       open={passwordConfirmOpen}

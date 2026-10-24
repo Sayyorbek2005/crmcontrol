@@ -271,3 +271,48 @@
   from { transform: scale(.55); opacity: .35; }
   to { transform: scale(1); opacity: 1; }
 }
+
+/* "Yangi mijoz" tugmasi: "+" va odamcha belgisi yonma-yon. */
+.sa-add-client { display: inline-flex; align-items: center; gap: 8px; }
+.sa-add-icons { display: inline-flex; align-items: center; gap: 1px; line-height: 0; flex-shrink: 0; }
+@media (max-width: 600px) {
+  /* Telefonda tugma o'ng tomonda, qo'ng'iroqcha yonida turadi. */
+  .sa-header-tools .sa-add-client { margin-left: auto; padding: 8px 10px; }
+  .sa-header-tools .sa-add-client .sa-add-text { display: none; }
+  .sa-header-tools .sa-add-client svg { display: block; width: auto; height: auto; }
+}
+
+/* Menyu pastki qismi CRM (direktor) menyusidagi kabi. */
+.sa-layout .sa-side-bottom { padding-top: 12px; border-top: 1px solid var(--border-subtle, #f3f4f6); }
+.sa-layout .sa-side-bottom .sa-side-help { gap: 10px; padding: 8px 10px; border-radius: 12px; color: var(--text-muted, #6b7280); font-size: 14px; font-weight: 500; }
+.sa-layout .sa-side-bottom .sa-side-help svg { width: 17px; height: 17px; color: var(--text-faint, #9ca3af); }
+.sa-layout .sa-side-status { gap: 10px; padding: 8px 10px; color: var(--text-muted, #6b7280); font-size: 14px; }
+.sa-layout .sa-side-status i { width: 10px; height: 10px; background: var(--success, #10b981); box-shadow: none; }
+.sa-layout .sa-admin-profile { align-items: center; gap: 10px; margin-top: 4px; padding: 8px 10px; border-top: 0; border-radius: 12px; }
+.sa-layout .sa-admin-profile .sa-admin-avatar { width: 32px; height: 32px; flex-shrink: 0; border-radius: 12px; background: linear-gradient(135deg, var(--brand, #2563eb), var(--violet, #8b5cf6)); color: #fff; font-size: 11px; font-weight: 700; }
+.sa-layout .sa-admin-profile > div { gap: 1px; min-width: 0; }
+.sa-layout .sa-admin-profile b { overflow: hidden; color: var(--text-primary, #111827); font-size: 14px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.sa-layout .sa-admin-profile small { color: var(--text-faint, #9ca3af); font-size: 12px; }
+.sa-layout .sa-admin-profile > button { width: 26px; min-width: 26px; height: 26px; color: var(--text-faint, #9ca3af); }
+.sa-layout .sa-admin-profile > button svg { transform: none; }
+.sa-layout .sa-admin-profile small { padding: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Statistika kartalari har qanday ekranda bitta qatorda (4 ta yonma-yon). */
+.sa-content main .sa-stats { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+@media (max-width: 760px) {
+  /* Tor ekranda ixcham ko'rinish: belgi, son, nom — ustma-ust va markazda. */
+  .sa-content main .sa-stats { gap: 8px; }
+  .sa-content main .sa-stat { flex-direction: column; align-items: center; justify-content: flex-start; gap: 6px; min-width: 0; min-height: 0; padding: 10px 6px 11px; border-radius: 14px; text-align: center; }
+  .sa-content main .sa-stat::after { display: none; }
+  .sa-content main .sa-stat > span { display: grid; place-items: center; padding: 7px; border-radius: 10px; }
+  .sa-content main .sa-stat > span svg { width: 16px; height: 16px; }
+  .sa-content main .sa-stat > div { display: flex; flex-direction: column-reverse; gap: 2px; width: 100%; min-width: 0; }
+  .sa-content main .sa-stat strong { margin: 0; font-size: 18px; line-height: 1.1; font-variant-numeric: tabular-nums; }
+  .sa-content main .sa-stat small { font-size: 10px; line-height: 1.2; overflow-wrap: anywhere; }
+}
+@media (max-width: 340px) {
+  .sa-content main .sa-stats { gap: 6px; }
+  .sa-content main .sa-stat { padding: 8px 4px 9px; }
+  .sa-content main .sa-stat strong { font-size: 16px; }
+  .sa-content main .sa-stat small { font-size: 9px; }
+}

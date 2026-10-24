@@ -11,9 +11,9 @@ export const styles = {
 
   container: {
     width: "100%",
-    maxWidth: "1100px",
+    maxWidth: "none",
     margin: "0 auto",
-    padding: "16px",
+    padding: 0,
     boxSizing: "border-box",
   },
 

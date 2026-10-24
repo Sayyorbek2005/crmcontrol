@@ -1,3 +1,4 @@
+import { documentNumbers } from "./documentNumbers";
 const STORAGE_KEY = "crm_debt_payments_v1";
 
 export function readDebtPayments() {
@@ -19,6 +20,7 @@ export function readPosSales() {
   try {
     const saved = JSON.parse(localStorage.getItem("crm_sales") || "[]");
     if (!Array.isArray(saved)) return [];
+    const numbers = documentNumbers(saved, "sales");
     return saved.map((sale) => {
       const amount = Number(sale.amount ?? sale.total ?? 0);
       const status = sale.status || (Number(sale.debtBalance || 0) > 0 ? "partial" : "paid");
@@ -26,6 +28,7 @@ export function readPosSales() {
       const parsedDate = sale.date ? new Date(sale.date) : null;
       return {
         ...sale,
+        displayId: numbers[String(sale.id ?? sale.receiptNumber)],
         createdAt: sale.date || "",
         id: String(sale.id ?? sale.receiptNumber),
         customer: sale.customer || sale.customerName || "Noma'lum mijoz",

@@ -192,3 +192,34 @@
 .mt-1 {
   margin-top: var(--spacing);
 }
+
+@media (max-width: 480px) {
+  .report-type-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+  }
+
+  .report-type-grid > button {
+    align-items: flex-start;
+    gap: 7px !important;
+    padding: 10px !important;
+    min-width: 0;
+  }
+
+  .report-type-grid > button > div:first-child {
+    flex: 0 0 auto;
+    padding: 6px !important;
+  }
+
+  .report-type-grid > button .text-sm {
+    font-size: 0.68rem !important;
+    line-height: 1.2;
+    overflow-wrap: anywhere;
+  }
+
+  .report-type-grid > button .text-xs {
+    font-size: 0.58rem !important;
+    line-height: 1.2;
+    overflow-wrap: anywhere;
+  }
+}

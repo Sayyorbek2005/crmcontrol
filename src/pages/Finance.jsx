@@ -32,7 +32,9 @@ import {
 import { expenseCategories as initialCategories } from "../data/mockData";
 import { readFinanceOperations, saveFinanceOperations } from "../data/financeStore";
 import { readDebtPayments, readPosSales, withDebtBalance } from "../data/debtPayments";
+import { downloadCsv } from "../utils/csv";
 
+import { formatCurrency, moneyInputValue, toBaseMoney } from "../data/currency";
 const readBusinessList = (key) => {
   try {
     const value = JSON.parse(localStorage.getItem(key) || "[]");
@@ -75,7 +77,7 @@ const CustomBarTooltip = ({ active, payload, label }) => {
       {payload.map((e) => (
         <div key={e.name} className="flex justify-between gap-4">
           <span style={{ color: e.color }}>{tx(e.name)}</span>
-          <span className="font-semibold">{tx(fmt(e.value))}</span>
+          <span className="font-semibold">{formatCurrency(e.value)}</span>
         </div>
       ))}
     </div>
@@ -192,7 +194,7 @@ export default function Finance() {
   const kpis = [
     {
       label: "Jami kirim (Daromad)",
-      value: totalIncomeValue.toLocaleString("ru-RU"),
+      value: formatCurrency(totalIncomeValue),
       change: percentage(currentIncome, previousIncome),
       icon: TrendingUp,
       color: "var(--brand)",
@@ -200,7 +202,7 @@ export default function Finance() {
     },
     {
       label: "Jami chiqim (Xarajat)",
-      value: totalExpenseValue.toLocaleString("ru-RU"),
+      value: formatCurrency(totalExpenseValue),
       change: percentage(currentExpense, previousExpense),
       icon: TrendingDown,
       color: "var(--danger)",
@@ -208,7 +210,7 @@ export default function Finance() {
     },
     {
       label: "Sof foyda",
-      value: (totalIncomeValue - totalExpenseValue).toLocaleString("ru-RU"),
+      value: formatCurrency(totalIncomeValue - totalExpenseValue),
       change: percentage(currentIncome - currentExpense, previousIncome - previousExpense),
       icon: DollarSign,
       color: "var(--success)",
@@ -216,7 +218,7 @@ export default function Finance() {
     },
     {
       label: "Jami qarzdorlik",
-      value: totalDebtValue.toLocaleString("ru-RU"),
+      value: formatCurrency(totalDebtValue),
       change: "",
       icon: CreditCard,
       color: "var(--warning)",
@@ -226,21 +228,12 @@ export default function Finance() {
 
   // CSV yuklash
   const handleExportCSV = () => {
-    const headers = [["Turi", "Kategoriya", "Summa (so'm)", "Sana", "Xodim", "Tavsif"].map(value => tx(value)).join(",")];
-    const incomeRows = allIncomes.map(
-      (e) => `"${tx("Kirim")}","${tx(e.category)}",${e.amount},"${e.date}","${e.employee}","${tx(e.description)}"`
-    );
-    const expenseRows = allExpenses.map(
-      (e) => `"${tx("Chiqim")}","${tx(e.category)}",${e.amount},"${e.date}","${e.employee}","${tx(e.description)}"`
-    );
-    const csvContent = "data:text/csv;charset=utf-8,\uFEFF" + [headers, ...incomeRows, ...expenseRows].join("\n");
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `moliya_hisobot_${new Date().toISOString().slice(0, 10)}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    const headers = ["Turi", "Kategoriya", "Summa (so'm)", "Sana", "Xodim", "Tavsif"].map(tx);
+    const rows = [
+      ...allIncomes.map((item) => [tx("Kirim"), tx(item.category), formatCurrency(item.amount), item.date, item.employee, tx(item.description)]),
+      ...allExpenses.map((item) => [tx("Chiqim"), tx(item.category), formatCurrency(item.amount), item.date, item.employee, tx(item.description)]),
+    ];
+    downloadCsv([headers, ...rows], `moliya_hisobot_${new Date().toISOString().slice(0, 10)}.csv`);
   };
 
   const handleOpenEditModal = (type, index, item) => {
@@ -349,11 +342,11 @@ export default function Finance() {
       </div>
 
       {/* KPI Kartochkalar */}
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-4 finance-kpis gap-4">
         {kpis.map((k) => (
           <div
             key={k.label}
-            className="rounded-2xl p-5 transition-card flex flex-col justify-between"
+            className={`rounded-2xl p-5 transition-card flex flex-col justify-between ${k.label === "Jami qarzdorlik" ? "debt-highlight" : ""}`}
             style={{
               background: "var(--surface)",
               border: "1px solid var(--border)",
@@ -387,7 +380,7 @@ export default function Finance() {
                   wordBreak: "break-word",
                 }}
               >
-                {tx(k.value)}{tx(" so'm")}</div>
+                {k.value}</div>
               <div
                 className="text-xs mt-1 font-medium"
                 style={{ color: "var(--text-faint)" }}
@@ -434,7 +427,7 @@ export default function Finance() {
                 tickLine={false}
               />
               <YAxis
-                tickFormatter={(v) => tx(fmt(v))}
+                tickFormatter={(v) => formatCurrency(v)}
                 tick={{ fontSize: 11, fill: "var(--text-faint)" }}
                 axisLine={false}
                 tickLine={false}
@@ -497,7 +490,7 @@ export default function Finance() {
                   <Cell key={i} fill={entry.color} />
                 ))}
               </Pie>
-              <Tooltip formatter={(v, name) => [tx(fmt(Number(v))), tx(name)]} labelFormatter={(value) => tx(value)} />
+              <Tooltip formatter={(v, name) => [formatCurrency(Number(v)), tx(name)]} labelFormatter={(value) => tx(value)} />
             </PieChart>
           </ResponsiveContainer>
           <div className="space-y-2 mt-2">
@@ -624,7 +617,7 @@ export default function Finance() {
                     className="px-5 py-3.5 text-sm font-semibold"
                     style={{ color: isIncome ? "var(--success)" : "var(--danger)" }}
                   >
-                    {tx(isIncome ? "+" : "-")}{tx(Number(item.amount).toLocaleString())}{tx(" so'm")}</td>
+                    {tx(isIncome ? "+" : "-")}{formatCurrency(Number(item.amount))}</td>
                   <td
                     className="px-5 py-3.5 text-xs"
                     style={{ color: "var(--text-faint)" }}
@@ -635,7 +628,7 @@ export default function Finance() {
                     className="px-5 py-3.5 text-sm"
                     style={{ color: "var(--text-muted)" }}
                   >
-                    {item.employee}
+                    {item.automatic ? tx(item.employee) : item.employee}
                   </td>
                   <td
                     className="px-5 py-3.5 text-sm"
@@ -763,9 +756,9 @@ export default function Finance() {
                   type="number"
                   required
                   placeholder={tx("Miqdorni kiriting")}
-                  value={formData.amount}
+                  value={moneyInputValue(formData.amount, false)}
                   onChange={(e) =>
-                    setFormData({ ...formData, amount: e.target.value })
+                    setFormData({ ...formData, amount: String(toBaseMoney(e.target.value)) })
                   }
                   className="w-full px-3 py-2.5 rounded-xl text-sm outline-none"
                   style={{

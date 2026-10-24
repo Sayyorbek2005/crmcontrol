@@ -1,3 +1,6 @@
+import Modal from "../components/Modal";
+import { createSalesWord, salesForPeriod, salesReportWeeks } from "../data/salesWordReport";
+import { formatCardNumber } from "../data/directorCards";
 import { translateText as tx } from "../locales/translateText";
 import { useLanguage as useUILanguage } from "../context/LanguageContext";
 import { createPortal } from "react-dom";
@@ -16,7 +19,12 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import { readDebtPayments, readPosSales, withDebtBalance } from "../data/debtPayments";
+import DateRangeFilter, { matchesDateRange } from "../components/DateRangeFilter";
+import SalesProductFilter from "../components/SalesProductFilter";
+import { normalizeProductText, saleMatchesProduct } from "../data/salesProductFilter";
+import { reportDay } from "../data/reportPeriod";
 
+import { formatCurrency } from "../data/currency";
 const statusBadge = {
   paid: {
     label: "To'landi",
@@ -44,13 +52,30 @@ const statusBadge = {
 };
 
 export default function Sales({ onNavigate }) {
-  useUILanguage();
+  const { lang } = useUILanguage();
   const [sales, setSales] = useState(() => {
     const payments = readDebtPayments();
     return [...readPosSales()].map((sale) => withDebtBalance(sale, payments));
   });
 
+  const [exportOpen, setExportOpen] = useState(false);
+  const [exportBusy, setExportBusy] = useState(false);
+  const [exportError, setExportError] = useState("");
+  const [selectedReport, setSelectedReport] = useState(null);
   const [search, setSearch] = useState("");
+  const [productFilter, setProductFilter] = useState({ category: "", product: null, query: "" });
+  const [productCatalog] = useState(() => {
+    let stored = [];
+    try { const parsed = JSON.parse(localStorage.getItem("crm_products") || "[]"); if (Array.isArray(parsed)) stored = parsed; } catch { /* Empty catalog */ }
+    const catalog = new Map();
+    [...stored, ...sales.flatMap((sale) => sale.items || [])].forEach((product) => {
+      const key = product.id != null ? String(product.id) : normalizeProductText(product.name);
+      if (product.name && !catalog.has(key)) catalog.set(key, product);
+    });
+    return [...catalog.values()];
+  });
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
 
   const [statusFilter, setStatusFilter] = useState("all");
 
@@ -84,11 +109,10 @@ export default function Sales({ onNavigate }) {
   /* ================= FILTER ================= */
 
   const filtered = sales.filter((sale) => {
-    const searchText = search.toLowerCase();
+    const searchText = normalizeProductText(search);
 
     const matchSearch =
-      sale.customer.toLowerCase().includes(searchText) ||
-      sale.id.toLowerCase().includes(searchText);
+      [sale.customer, sale.displayId, sale.id, sale.receiptNumber, ...(sale.items || []).flatMap((item) => [item.id, item.sku, item.name, item.category])].some((value) => (normalizeProductText(value).startsWith(searchText) || normalizeProductText(value).replace(/^[sq]-/, "").startsWith(searchText)));
 
     const matchStatus =
       statusFilter === "all" ||
@@ -96,7 +120,7 @@ export default function Sales({ onNavigate }) {
         ? Number(sale.debtBalance || 0) > 0
         : sale.status === statusFilter);
 
-    return matchSearch && matchStatus;
+    return matchSearch && matchStatus && saleMatchesProduct(sale, productCatalog, productFilter) && matchesDateRange(sale.createdAt || sale.date, dateFrom, dateTo);
   });
 
   /* ================= DELETE ================= */
@@ -127,49 +151,21 @@ export default function Sales({ onNavigate }) {
 
   /* ================= EXPORT ================= */
 
-  const handleExport = () => {
-    if (!filtered.length) return;
-
-    const headers = [
-      "Sotuv ID",
-      "Mijoz",
-      "Mahsulotlar soni",
-      "Summa (so'm)",
-      "To'lov turi",
-      "Sana",
-      "Holat",
-    ];
-
-    const rows = filtered.map((sale) => [
-      sale.id,
-      `"${sale.customer}"`,
-      sale.products,
-      sale.amount,
-      `"${tx(sale.payment)}"`,
-      `"${tx(sale.date)}"`,
-      `"${tx(statusBadge[sale.status]?.label || sale.status)}"`,
-    ]);
-
-    const csvContent =
-      "data:text/csv;charset=utf-8,\uFEFF" +
-      [
-        headers.map(value => tx(value)).join(","),
-        ...rows.map((row) => row.join(",")),
-      ].join("\n");
-
-    const link = document.createElement("a");
-
-    link.href = encodeURI(csvContent);
-
-    link.download = `sotuvlar_${new Date()
-      .toISOString()
-      .slice(0, 10)}.csv`;
-
-    document.body.appendChild(link);
-
-    link.click();
-
-    document.body.removeChild(link);
+  const handleExport = async period => {
+    setExportBusy(true);
+    setExportError("");
+    try {
+      const rows = salesForPeriod(sales, period), blob = createSalesWord(rows, period);
+      const url = URL.createObjectURL(blob), link = document.createElement("a");
+      const rangeName = period.type === "month" ? `${period.year}-${String(period.month).padStart(2, "0")}` : period.type === "week" ? `${period.year}-${String(period.month).padStart(2, "0")}-hafta-${period.week}` : period.type === "year" ? String(period.year) : "bugungi";
+      link.href = url;
+      link.download = `Sotuv-hisoboti-${rangeName}.docx`;
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      setExportOpen(false);
+      setSelectedReport(null);
+    } catch { setExportError("Hisobot tayyorlanmadi. Qayta urinib ko‘ring."); }
+    finally { setExportBusy(false); }
   };
 
   /* ================= STATS ================= */
@@ -199,7 +195,7 @@ export default function Sales({ onNavigate }) {
   const stats = [
     {
       label: "Jami sotuvlar",
-      value: `${totalSalesAmount.toLocaleString()} so'm`,
+      value: formatCurrency(totalSalesAmount),
       change: "0%",
       icon: DollarSign,
       color: "var(--brand)",
@@ -208,7 +204,7 @@ export default function Sales({ onNavigate }) {
 
     {
       label: "Bugun",
-      value: `${todaySalesAmount.toLocaleString()} so'm`,
+      value: formatCurrency(todaySalesAmount),
       change: "0%",
       icon: TrendingUp,
       color: "var(--success)",
@@ -226,13 +222,19 @@ export default function Sales({ onNavigate }) {
 
     {
       label: "Qaytarilgan",
-      value: `${totalReturnedAmount.toLocaleString()} so'm`,
+      value: formatCurrency(totalReturnedAmount),
       change: "0%",
       icon: RefreshCw,
       color: "var(--warning)",
       bg: "var(--warning-light)",
     },
   ];
+
+  const currentReportDay = reportDay(new Date());
+  const currentReportYear = Number(currentReportDay.slice(0, 4));
+  const currentReportMonth = Number(currentReportDay.slice(5, 7));
+  const currentReportWeek = salesReportWeeks(currentReportYear, currentReportMonth)
+    .find(item => item.start <= currentReportDay && item.end >= currentReportDay)?.week || 1;
 
   return (
     <div className="space-y-6 fade-in">
@@ -261,7 +263,7 @@ export default function Sales({ onNavigate }) {
         <div className="flex items-center gap-2">
 
           <button
-            onClick={handleExport}
+            onClick={() => { setExportError(""); setSelectedReport(null); setExportOpen(true); }}
             className="sales-header-btn"
           >
             <Download size={15} />{tx("Export")}</button>
@@ -336,7 +338,7 @@ export default function Sales({ onNavigate }) {
 
         {/* SEARCH */}
 
-        <div className="sales-toolbar">
+        <div className="sales-toolbar flex-wrap">
 
           <div className="sales-search">
 
@@ -350,12 +352,15 @@ export default function Sales({ onNavigate }) {
             <input
               value={search}
               onChange={(e) =>
-                setSearch(e.target.value)
+                setSearch(e.target.value.replace(/(^|\s)(\S)/g, (_, space, letter) => space + letter.toLocaleUpperCase("uz-UZ")))
               }
               placeholder={tx("Sotuv yoki mijoz qidirish...")}
             />
 
           </div>
+
+          <SalesProductFilter products={productCatalog} value={productFilter} onChange={setProductFilter} />
+          <DateRangeFilter from={dateFrom} to={dateTo} onFromChange={setDateFrom} onToChange={setDateTo} />
 
           <div className="sales-filters">
 
@@ -436,7 +441,7 @@ export default function Sales({ onNavigate }) {
                   >
 
                     <td className="sales-id">
-                      {sale.id}
+                      {sale.displayId || sale.id}
                     </td>
 
                     <td>
@@ -461,10 +466,11 @@ export default function Sales({ onNavigate }) {
                       {tx(sale.products)}{tx(" ta")}</td>
 
                     <td className="sales-amount">
-                      {tx(sale.amount.toLocaleString())}{tx(" so'm")}</td>
+                      {formatCurrency(sale.amount)}</td>
 
                     <td className="sales-muted">
                       {tx(sale.payment)}
+                      {sale.receivingCard && <small style={{ display: "block" }}>{formatCardNumber(sale.receivingCard.number)}<br />{formatCurrency(sale.initialPaidAmount ?? sale.paidAmount ?? 0)}</small>}
                     </td>
 
                     <td className="sales-date">
@@ -805,6 +811,52 @@ export default function Sales({ onNavigate }) {
 
       )}
 
+    <Modal open={exportOpen} onClose={() => { if (!exportBusy) { setExportOpen(false); setSelectedReport(null); } }} title="Sotuv hisobotini yuklash" subtitle="Davrni tanlang · Word hujjati" icon={Download} width={520} contentOnly>
+      <div className="sales-export-options">
+        {[
+          { type: "today", title: "Bugungi hisobot", desc: "Bugun amalga oshirilgan sotuvlar", period: { type: "today" } },
+          { type: "week", title: "Haftalik hisobot", desc: "Oy va hafta oralig‘ini tanlang", period: { type: "week", year: currentReportYear, month: currentReportMonth, week: currentReportWeek } },
+          { type: "month", title: "Oylik hisobot", desc: "Yil va oyni tanlang", period: { type: "month", year: currentReportYear, month: currentReportMonth } },
+          { type: "year", title: "Yillik hisobot", desc: "Kerakli yilni tanlang", period: { type: "year", year: currentReportYear } },
+        ].map(option => (
+          <button disabled={exportBusy} key={option.type} className={selectedReport?.type === option.type ? "is-selected" : ""} onClick={() => option.type === "today" ? handleExport(option.period) : setSelectedReport(previous => previous?.type === option.type ? previous : option.period)}>
+            <span className="sales-export-icon"><Download size={20} /></span>
+            <span><b>{tx(option.title)}</b><small>{tx(option.desc)}</small></span>
+            <strong>{salesForPeriod(sales, selectedReport?.type === option.type ? selectedReport : option.period).length}<small>{tx("ta sotuv")}</small></strong>
+          </button>
+        ))}
+      </div>
+      {selectedReport && (
+        <div className="sales-export-period">
+          <label>
+            <span>{tx("Yil")}</span>
+            <select value={selectedReport.year} onChange={event => setSelectedReport(current => ({ ...current, year: Number(event.target.value), week: 1 }))}>
+              {Array.from({ length: currentReportYear - 1999 }, (_, index) => currentReportYear - index).map(year => <option key={year} value={year}>{year}</option>)}
+            </select>
+          </label>
+          {(selectedReport.type === "week" || selectedReport.type === "month") && (
+            <label>
+              <span>{tx("Oy")}</span>
+              <select value={selectedReport.month} onChange={event => setSelectedReport(current => ({ ...current, month: Number(event.target.value), week: 1 }))}>
+                {Array.from({ length: 12 }, (_, index) => index + 1).map(month => <option key={month} value={month}>{new Date(Date.UTC(2024, month - 1, 1)).toLocaleDateString(lang === "ru" ? "ru-RU" : "uz-UZ", { month: "long", timeZone: "UTC" })}</option>)}
+              </select>
+            </label>
+          )}
+          {selectedReport.type === "week" && (
+            <label>
+              <span>{tx("Hafta")}</span>
+              <select value={selectedReport.week} onChange={event => setSelectedReport(current => ({ ...current, week: Number(event.target.value) }))}>
+                {salesReportWeeks(selectedReport.year, selectedReport.month).map(({ week, start, end }) => <option key={week} value={week}>{week}{lang === "ru" ? "-я неделя ·" : "-hafta ·"} {Number(start.slice(8))}–{Number(end.slice(8))} {new Date(Date.UTC(selectedReport.year, selectedReport.month - 1, 1)).toLocaleDateString(lang === "ru" ? "ru-RU" : "uz-UZ", { month: "long", timeZone: "UTC" })}</option>)}
+              </select>
+            </label>
+          )}
+          <button type="button" className="sales-export-download" disabled={exportBusy} onClick={() => handleExport(selectedReport)}>
+            <Download size={16} />{tx(exportBusy ? "Tayyorlanmoqda…" : `Hisobotni yuklash · ${salesForPeriod(sales, selectedReport).length} ta sotuv`)}
+          </button>
+        </div>
+      )}
+      {exportError && <p role="alert" className="text-danger-color">{exportError}</p>}
+    </Modal>
     </div>
   );
 }

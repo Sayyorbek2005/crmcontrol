@@ -1,7 +1,8 @@
+import HeaderClock from "./HeaderClock";
 import { translateText as tx } from "../locales/translateText";
 import { useLanguage as useUILanguage } from "../context/LanguageContext";
 import './Topbar.css';
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useLayoutEffect } from "react";
 import {
   Search,
   Plus,
@@ -18,6 +19,29 @@ import {
 import { useTheme } from "../context/ThemeContext";
 import { useLanguage, languages } from "../context/LanguageContext";
 import { profileInitials, profileName } from "../data/profileStore";
+import { createPortal } from "react-dom";
+import { getCurrencySettings, saveCurrencySettings } from "../data/currency";
+
+import { formatCurrency } from "../data/currency";
+
+const COMPACT_QUERY = "(max-width: 700px)";
+// Kurs oynasi animatsiyasi (2 soniyadan ancha qisqa).
+const RATE_OPEN_MS = 460;
+const RATE_CLOSE_MS = 360;
+const matchesQuery = (query) => typeof window !== "undefined" && typeof window.matchMedia === "function" && window.matchMedia(query).matches;
+
+// Oyna bosilgan tugma joyidan kichik holda chiqib, ekran markazida to'liq o'lchamga yetadi.
+function morphFrames(card, origin) {
+  if (!card || typeof card.animate !== "function" || matchesQuery("(prefers-reduced-motion: reduce)")) return null;
+  const box = card.getBoundingClientRect();
+  const from = origin?.isConnected ? origin.getBoundingClientRect() : { left: box.left + box.width / 2, top: box.top, width: 0, height: 0 };
+  const dx = from.left + from.width / 2 - (box.left + box.width / 2);
+  const dy = from.top + from.height / 2 - (box.top + box.height / 2);
+  return [
+    { transform: `translate(${dx}px, ${dy}px) scale(0.08)`, opacity: 0, borderRadius: "40px" },
+    { transform: "translate(0, 0) scale(1)", opacity: 1, borderRadius: "18px" },
+  ];
+}
 
 export default function Topbar({ onNavigate, onOpen, user, profile }) {
   useUILanguage();
@@ -25,6 +49,9 @@ export default function Topbar({ onNavigate, onOpen, user, profile }) {
   const { lang, setLang, t } = useLanguage();
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const [currency, setCurrency] = useState(getCurrencySettings);
+  const [rateDraft, setRateDraft] = useState(() => String(getCurrencySettings().usdRate || ""));
+  const [rateModal, setRateModal] = useState(false);
   const inputRef = useRef(null);
 
   useEffect(() => {
@@ -42,6 +69,72 @@ export default function Topbar({ onNavigate, onOpen, user, profile }) {
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, []);
+
+  useEffect(() => {
+    const updateCurrency = () => setCurrency(getCurrencySettings());
+    window.addEventListener("crm-currency-change", updateCurrency);
+    return () => window.removeEventListener("crm-currency-change", updateCurrency);
+  }, []);
+
+  // Telefonda (≤700px) "1$" tugmasi yashirin: USD bosilganda har safar kurs oynasi ochiladi.
+  const [compactCurrency, setCompactCurrency] = useState(() => matchesQuery(COMPACT_QUERY));
+  useEffect(() => {
+    if (typeof window.matchMedia !== "function") return undefined;
+    const query = window.matchMedia(COMPACT_QUERY);
+    const update = () => setCompactCurrency(query.matches);
+    query.addEventListener?.("change", update);
+    return () => query.removeEventListener?.("change", update);
+  }, []);
+
+  // Kurs oynasi bosilgan tugmadan o'sib chiqadi va yopilganda o'sha tugmaga qaytadi.
+  const rateOriginRef = useRef(null);
+  const rateCardRef = useRef(null);
+  const rateBackdropRef = useRef(null);
+  const rateClosingRef = useRef(false);
+  useLayoutEffect(() => {
+    if (!rateModal) return;
+    rateClosingRef.current = false;
+    const frames = morphFrames(rateCardRef.current, rateOriginRef.current);
+    rateBackdropRef.current?.animate?.([{ opacity: 0 }, { opacity: 1 }], { duration: frames ? RATE_OPEN_MS * 0.7 : 150, easing: "ease-out" });
+    if (frames) rateCardRef.current.animate(frames, { duration: RATE_OPEN_MS, easing: "cubic-bezier(.2, .9, .25, 1.05)" });
+  }, [rateModal]);
+  const openRateEditor = (event) => {
+    rateOriginRef.current = event?.currentTarget || null;
+    setRateDraft(String(currency.usdRate || ""));
+    setRateModal(true);
+  };
+  const closeRateEditor = () => {
+    if (!rateModal || rateClosingRef.current) return;
+    rateClosingRef.current = true;
+    let finished = false;
+    const finish = () => { if (finished) return; finished = true; rateClosingRef.current = false; setRateModal(false); };
+    const frames = morphFrames(rateCardRef.current, rateOriginRef.current);
+    if (!frames) { finish(); return; }
+    const animation = rateCardRef.current.animate([...frames].reverse(), { duration: RATE_CLOSE_MS, easing: "cubic-bezier(.55, 0, .75, .2)", fill: "forwards" });
+    rateBackdropRef.current?.animate?.([{ opacity: 1 }, { opacity: 0 }], { duration: RATE_CLOSE_MS, easing: "ease-in", fill: "forwards" });
+    animation.onfinish = finish;
+    animation.oncancel = finish;
+    // Tab fonda bo'lsa brauzer animatsiyani to'xtatib turadi: oyna baribir yopilsin.
+    window.setTimeout(finish, RATE_CLOSE_MS + 150);
+  };
+  useEffect(() => {
+    if (!rateModal) return undefined;
+    const onKey = (event) => { if (event.key === "Escape") closeRateEditor(); };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  });
+  const saveRate = (event) => {
+    event.preventDefault();
+    const usdRate = Number(String(rateDraft).replace(/,/g, ""));
+    if (!Number.isFinite(usdRate) || usdRate <= 0) return;
+    setCurrency(saveCurrencySettings({ code: "USD", usdRate }));
+    closeRateEditor();
+  };
+
+  const changeCurrency = (code, event) => {
+    if (code === "USD" && (compactCurrency || !currency.usdRate)) { openRateEditor(event); return; }
+    setCurrency(saveCurrencySettings({ ...currency, code }));
+  };
 
   const q = query.toLowerCase();
   const savedProducts = (() => {
@@ -158,6 +251,11 @@ export default function Topbar({ onNavigate, onOpen, user, profile }) {
 
         {/* O'ng tomon: Til almashtirish, Dark mode, Yangi sotuv va Profil */}
         <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+          <HeaderClock />
+          {currency.enabled.length > 1 && <div className="flex items-center gap-1 rounded-xl p-1" style={{ background: "var(--surface-2)", border: "1px solid var(--border)" }} title={currency.usdRate ? `1 USD = ${currency.usdRate.toLocaleString("en-US")} UZS` : tx("Dollar kursini kiriting")}>
+            {currency.enabled.map((code) => <button key={code} type="button" onClick={(event) => changeCurrency(code, event)} aria-label={code === "USD" && compactCurrency ? tx("Dollar kursini kiritish va USD tanlash") : undefined} className="lang-switch-btn" style={{ padding: "5px 8px", borderRadius: 8, fontSize: 11, fontWeight: 700, border: 0, background: currency.code === code ? "var(--brand)" : "transparent", color: currency.code === code ? "#fff" : "var(--text-muted)" }}>{code}</button>)}
+            {currency.enabled.includes("USD") && <button type="button" className="currency-rate-btn" onClick={openRateEditor} aria-label={tx("Dollar kursini sozlash")} title={tx("Dollar kursini sozlash")} style={{ border: 0, borderLeft: "1px solid var(--border)", background: "transparent", color: "var(--text-muted)", fontSize: 10, padding: "4px 6px" }}>1$</button>}
+          </div>}
           {/* Til almashtirish tugmasi (UZ / RU) */}
           <div
             className="lang-switch flex items-center shrink-0"
@@ -207,7 +305,10 @@ export default function Topbar({ onNavigate, onOpen, user, profile }) {
           </button>
 
           <button
+            type="button"
             onClick={() => onNavigate("sales-new")}
+            aria-label={tx(t("topbar.newSale", "Yangi sotuv"))}
+            title={tx(t("topbar.newSale", "Yangi sotuv"))}
             className="quick-sale-btn flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold text-white transition-all hover:opacity-90 active:scale-95 shrink-0"
             style={{
               background:
@@ -215,7 +316,10 @@ export default function Topbar({ onNavigate, onOpen, user, profile }) {
               boxShadow: "0 2px 8px rgba(37,99,235,0.3)",
             }}
           >
-            <Plus size={15} />
+            <span className="quick-sale-icons" aria-hidden="true">
+              <Plus size={13} strokeWidth={3} />
+              <ShoppingCart size={17} strokeWidth={2.2} />
+            </span>
             <span className="quick-sale-text">{tx(t("topbar.newSale", "Yangi sotuv"))}</span>
           </button>
 
@@ -250,10 +354,18 @@ export default function Topbar({ onNavigate, onOpen, user, profile }) {
         </div>
       </header>
 
+      {rateModal && createPortal(<div ref={rateBackdropRef} data-motion="manual" className={`crm-content-modal currency-rate-modal${compactCurrency ? " is-screen" : ""}`} onMouseDown={(event) => { if (event.target === event.currentTarget) closeRateEditor(); }}>
+        <form ref={rateCardRef} role="dialog" aria-modal="true" aria-labelledby="currency-rate-title" onSubmit={saveRate} className="currency-rate-card" style={{ width: "min(100%, 420px)", padding: 24, borderRadius: 18, background: "var(--surface)", border: "1px solid var(--border)", boxShadow: "var(--shadow-lg)" }}>
+          <div className="flex items-start justify-between gap-3 mb-5"><div><h2 id="currency-rate-title" className="font-display font-bold text-lg">{tx("Dollar kursi")}</h2><p className="text-xs mt-1 text-muted-color">{tx("1 USD necha so'm ekanini kiriting. Barcha narxlar shu kursda ko'rsatiladi.")}</p></div><button type="button" onClick={closeRateEditor} aria-label={tx("Yopish")}><X size={18}/></button></div>
+          <label className="block text-sm font-semibold">{tx("1 USD = UZS")}<input className="input-base mt-1.5" type="number" inputMode="decimal" min="1" step="any" required autoFocus value={rateDraft} onChange={(event) => setRateDraft(event.target.value)} placeholder="Masalan: 12 500" /></label>
+          <div className="flex justify-end gap-2 mt-5"><button type="button" className="btn-ghost" onClick={closeRateEditor}>{tx("Bekor qilish")}</button><button type="submit" className="btn-primary">{tx("Saqlash va USD tanlash")}</button></div>
+        </form>
+      </div>, (compactCurrency ? document.body : document.getElementById("main-modal-root")) || document.body)}
+
       {/* Command Palette */}
       {searchOpen && (
         <div
-          className="fixed inset-0 z-[60] flex items-start justify-center pt-20 px-4"
+          className="command-palette-overlay motion-overlay fixed inset-0 z-[60] flex items-start justify-center pt-20 px-4"
           style={{
             background: "rgba(0,0,0,0.5)",
             backdropFilter: "blur(6px)",
@@ -264,7 +376,7 @@ export default function Topbar({ onNavigate, onOpen, user, profile }) {
           }}
         >
           <div
-            className="w-full max-w-xl rounded-2xl overflow-hidden scale-in"
+            className="w-full max-w-xl rounded-2xl overflow-hidden motion-drop"
             style={{
               background: "var(--surface)",
               boxShadow: "var(--shadow-lg)",
@@ -350,7 +462,7 @@ export default function Topbar({ onNavigate, onOpen, user, profile }) {
                         <div className="text-xs" style={{ color: "var(--text-faint)" }}>{p.sku} · {tx(p.category)}</div>
                       </div>
                       <span className="text-sm font-semibold" style={{ color: "var(--brand)" }}>
-                        {tx(p.price.toLocaleString())}{tx(" so'm")}</span>
+                        {formatCurrency(p.price)}</span>
                     </button>
                   ))}
                 </div>

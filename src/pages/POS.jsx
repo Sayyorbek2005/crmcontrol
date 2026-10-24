@@ -1,10 +1,18 @@
+import { nextDocumentNumber } from "../data/documentNumbers";
+import SalesProductFilter from "../components/SalesProductFilter";
+import { normalizeProductText, saleMatchesProduct } from "../data/salesProductFilter";
+import "./Sales.css";
+import { resolveReceivingCard } from "../data/directorCards";
+import ReceiptPaymentDetails from "../components/ReceiptPaymentDetails";
+import ProductQuickAddModal from "../components/ProductQuickAddModal";
+import { useTenantCompanyName } from "../data/tenantBrand";
+import Modal from "../components/Modal";
 import {
   POS_DRAFT_KEY,
   readPosDraft,
   cartKeyFor,
   createAddressId,
   phoneDigits,
-  startsWithCapital,
   getDefaultDebtDueDate,
 } from "./posHelpers";
 import { PaymentSuccessAnimation } from './PosPaymentPanel';
@@ -14,24 +22,63 @@ import { useLanguage as useUILanguage, useLanguage } from "../context/LanguageCo
 import { createPortal } from "react-dom";
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import "./POS.css";
+import "./POSTheme.css";
 import {
   FiSearch,
-  FiTrash2,
   FiShoppingCart,
   FiUser,
-  FiEdit2,
   FiAlertTriangle,
   FiPrinter,
   FiX,
 } from "react-icons/fi";
-import { customers as initialCustomers, products as initialProducts } from "../data/mockData";
+import { customers as initialCustomers, products as initialProducts, suppliers as supplierSeed } from "../data/mockData";
 import { useToast } from "../context/ToastContext";
 import checkAnimationSound from "../assets/check animation sound.m4a";
 
-export default function POS({ cartWindowOpen = false, onCartWindowChange }) {
+import { formatCurrency, moneyInputValue, toBaseMoney } from "../data/currency";
+import { removeOrder, reservedQuantities as readReservedQuantities } from "../data/ordersStore";
+const formatUzPhone = (phone) => {
+  const digits = String(phone || "").replace(/\D/g, "").slice(-9);
+  return [digits.slice(0, 2), digits.slice(2, 5), digits.slice(5, 7), digits.slice(7, 9)].filter(Boolean).join(" ");
+};
+
+const capitalizeCustomerName = (name) => String(name || "").trim().replace(/\s+/g, " ").split(" ").map((word) => word ? word[0].toLocaleUpperCase("uz-UZ") + word.slice(1).toLocaleLowerCase("uz-UZ") : "").join(" ");
+
+const readPosCustomerSuggestions = (activeCustomerKey, activeSalesKey, query, selectedPhone) => {
+  const normalizedQuery = String(query || "").trim().toLocaleLowerCase("uz-UZ");
+  if (!normalizedQuery) return [];
+  const records = [];
+  [activeCustomerKey].forEach((key) => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(key) || "[]");
+      if (Array.isArray(saved)) records.push(...saved);
+    } catch {}
+  });
+  [activeSalesKey].forEach((key) => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(key) || "[]");
+      if (Array.isArray(saved)) records.push(...saved);
+    } catch {}
+  });
+  const unique = new Map();
+  records.forEach((record) => {
+    const name = String(record?.name || record?.customerName || record?.customer || "").trim();
+    if (!name || !name.toLocaleLowerCase("uz-UZ").startsWith(normalizedQuery)) return;
+    const phone = phoneDigits(record?.phone || record?.customerPhone);
+    const key = phone || name.toLocaleLowerCase("uz-UZ");
+    if (!unique.has(key)) unique.set(key, { name: capitalizeCustomerName(name), phone });
+  });
+  const matches = [...unique.values()];
+  if (matches.some((customer) => customer.name.toLocaleLowerCase("uz-UZ") === normalizedQuery && customer.phone && customer.phone === selectedPhone)) return [];
+  return matches.sort((a, b) => a.name.localeCompare(b.name, "uz", { sensitivity: "base" })).slice(0, 8);
+};
+export default function POS({ cartWindowOpen = false, onCartWindowChange, draftKey = POS_DRAFT_KEY, onDraftChange, onBusyChange, onSaveSaleDraft, saveDraftActionRef, hideSaveDraftButton = false, draftOpenedAt, salesStorageKey = "crm_sales", customerStorageKey = "crm_customers", salesDocumentType = "sales", currentUser = null, orderMode = false, headingText, initialOrderDraft = null, reservationOrderId = null, onSaveOrder, saveOrderActionRef, onOrderSaveAvailabilityChange, onOrderSaleComplete }) {
   useUILanguage();
+  const companyName = useTenantCompanyName();
   const { t } = useLanguage();
   const { success, warning } = useToast();
+  const draftData = initialOrderDraft || readPosDraft(draftKey);
+  const [activeReservationOrderId, setActiveReservationOrderId] = useState(() => reservationOrderId || draftData.sourceOrderId || null);
 
   const text = (key, fallback) =>
     t ? t(`pos.${key}`, fallback) : fallback;
@@ -48,8 +95,22 @@ export default function POS({ cartWindowOpen = false, onCartWindowChange }) {
       ? JSON.parse(saved)
       : initialProducts;
   });
+  const [reservedStock, setReservedStock] = useState(() => readReservedQuantities(activeReservationOrderId));
 
+  const [categoryFilter, setCategoryFilter] = useState({ category: "", product: null, query: "" });
+  useEffect(() => { const refresh = () => { try { const products = JSON.parse(localStorage.getItem("crm_products") || "[]"); if (Array.isArray(products)) setProductList(products); } catch {} }; window.addEventListener("crm-products-updated", refresh); window.addEventListener("storage", refresh); return () => { window.removeEventListener("crm-products-updated", refresh); window.removeEventListener("storage", refresh); }; }, []);
+  useEffect(() => { const refresh = () => setReservedStock(readReservedQuantities(activeReservationOrderId)); refresh(); window.addEventListener("crm-orders-updated", refresh); window.addEventListener("storage", refresh); return () => { window.removeEventListener("crm-orders-updated", refresh); window.removeEventListener("storage", refresh); }; }, [activeReservationOrderId]);
   const [search, setSearch] = useState("");
+  const [quickAddProduct, setQuickAddProduct] = useState(null);
+  const [quickAddQuantity, setQuickAddQuantity] = useState("1");
+  const [suppliers] = useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem("crm_suppliers") || "null");
+      return Array.isArray(saved) ? saved : supplierSeed;
+    } catch {
+      return supplierSeed;
+    }
+  });
   const [selectedProductSelect] =
     useState("");
   const productsGridRef = useRef(null);
@@ -74,44 +135,47 @@ export default function POS({ cartWindowOpen = false, onCartWindowChange }) {
   /* =====================================================
      CART
   ===================================================== */
+  const availableStock = (product) => Math.max(0, Number(product?.stock || 0) - Number(reservedStock[String(product?.id)] || 0));
 
   const [cart, setCart] = useState(() => {
-    const saved = readPosDraft().cart;
+    const saved = draftData.cart;
     return Array.isArray(saved) ? saved : [];
   });
 
   const [globalDiscount, setGlobalDiscount] =
-    useState(() => Number(readPosDraft().globalDiscount) || 0);
+    useState(() => Number(draftData.globalDiscount) || 0);
 
   /* =====================================================
      CUSTOMER
   ===================================================== */
 
   const [customerName, setCustomerName] =
-    useState(() => readPosDraft().customerName || "");
+    useState(() => capitalizeCustomerName(draftData.customerName || ""));
 
   const [customerPhone, setCustomerPhone] =
-    useState(() => readPosDraft().customerPhone || "");
+    useState(() => phoneDigits(draftData.customerPhone || ""));
 
   const [customerError, setCustomerError] =
     useState("");
 
-  const [deliveryAddress, setDeliveryAddress] = useState(() => readPosDraft().deliveryAddress || "");
+  const [deliveryAddress, setDeliveryAddress] = useState(() => draftData.deliveryAddress || "");
   const [addresses, setAddresses] = useState(() => {
-    const saved = readPosDraft().addresses;
+    const saved = draftData.addresses;
     return Array.isArray(saved) ? saved : [];
   });
-  const [selectedAddressId, setSelectedAddressId] = useState(() => readPosDraft().selectedAddressId || null);
-  const [addressConfirmed, setAddressConfirmed] = useState(() => Boolean(readPosDraft().addressConfirmed));
+  const [selectedAddressId, setSelectedAddressId] = useState(() => draftData.selectedAddressId || null);
+  const [addressConfirmed, setAddressConfirmed] = useState(() => Boolean(draftData.addressConfirmed));
   const [addressError, setAddressError] = useState("");
 
   const [paymentOpen, setPaymentOpen] = useState(false);
+  const [saveDraftOpen, setSaveDraftOpen] = useState(false);
   useEffect(() => {
     if (compactCart) cartWindowBodyRef.current?.scrollTo({ top: 0 });
   }, [paymentOpen, compactCart]);
   const [paymentAmount, setPaymentAmount] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("cash");
-  const [paymentCard, setPaymentCard] = useState({ firstName: "", lastName: "", number: "" });
+  const [selectedCardId, setSelectedCardId] = useState("");
+  const [completedSale, setCompletedSale] = useState(null);
   const [debtDueDate, setDebtDueDate] = useState(getDefaultDebtDueDate);
   const [paymentError, setPaymentError] = useState("");
   const [paymentComplete, setPaymentComplete] = useState(false);
@@ -123,17 +187,22 @@ export default function POS({ cartWindowOpen = false, onCartWindowChange }) {
 
   useEffect(() => {
     try {
+      if (orderMode) return;
       if (paymentComplete) {
-        localStorage.removeItem(POS_DRAFT_KEY);
+        localStorage.removeItem(draftKey);
       } else {
-        localStorage.setItem(POS_DRAFT_KEY, JSON.stringify({
+        localStorage.setItem(draftKey, JSON.stringify({
           cart, globalDiscount, customerName, customerPhone,
           deliveryAddress, addresses, selectedAddressId, addressConfirmed,
+          sourceOrderId: activeReservationOrderId,
         }));
       }
     } catch { /* The sale can still be completed if browser storage is full. */ }
   }, [cart, globalDiscount, customerName, customerPhone, deliveryAddress,
-    addresses, selectedAddressId, addressConfirmed, paymentComplete]);
+    addresses, selectedAddressId, addressConfirmed, paymentComplete, draftKey, orderMode]);
+
+  useEffect(() => { onDraftChange?.({ customerName, customerPhone, count: cart.length }); }, [customerName, customerPhone, cart.length, onDraftChange]);
+
 
   useEffect(() => {
     const sound = new Audio(checkAnimationSound);
@@ -175,6 +244,8 @@ export default function POS({ cartWindowOpen = false, onCartWindowChange }) {
   const [receiptOpen, setReceiptOpen] =
     useState(false);
 
+  useEffect(() => { onBusyChange?.(paymentOpen || !!quickAddProduct || receiptOpen || saveDraftOpen); }, [paymentOpen, quickAddProduct, receiptOpen, saveDraftOpen, onBusyChange]);
+
   const [receiptNumber, setReceiptNumber] =
     useState("");
 
@@ -198,17 +269,15 @@ export default function POS({ cartWindowOpen = false, onCartWindowChange }) {
   ===================================================== */
 
   const filtered = productList.filter((p) => {
-    const matchSearch = p.name
-      .toLowerCase()
-      .includes(search.toLowerCase());
+    const matchSearch = [p.id, p.sku, p.name, p.category].some((value) => normalizeProductText(value).startsWith(normalizeProductText(search)));
 
     const matchSelect =
       !selectedProductSelect ||
       p.id.toString() ===
       selectedProductSelect;
 
-    return matchSearch && matchSelect;
-  });
+    return matchSearch && matchSelect && saleMatchesProduct({ items: [p] }, productList, categoryFilter);
+  }).sort((a, b) => a.name.localeCompare(b.name, "uz", { sensitivity: "base", numeric: true }));
 
   const assignUnassignedItems = (addressId) => {
     setCart((previous) => previous.map((item) =>
@@ -299,18 +368,20 @@ export default function POS({ cartWindowOpen = false, onCartWindowChange }) {
      ADD TO CART
   ===================================================== */
 
-  const addToCart = (p) => {
-    if (Number(p.stock) <= 0) {
+  const addToCart = (p, quantity = 1) => {
+    const requested = Math.floor(Number(quantity));
+    if (!Number.isFinite(requested) || requested < 1) return false;
+    if (availableStock(p) <= 0) {
       warning("Mahsulot tugagan", `${p.name} hozir omborda mavjud emas.`);
-      return;
+      return false;
     }
 
     const totalInCart = cart
       .filter((item) => item.id === p.id)
       .reduce((sum, item) => sum + item.qty, 0);
-    if (totalInCart >= Number(p.stock)) {
-      warning("Miqdor cheklangan", `${p.name} uchun ombordagi barcha mahsulot savatchada.`);
-      return;
+    if (totalInCart + requested > availableStock(p)) {
+      warning("Miqdor cheklangan", `${p.name} uchun band qilinmagan mahsulot yetarli emas.`);
+      return false;
     }
 
     setCart((prev) => {
@@ -324,7 +395,7 @@ export default function POS({ cartWindowOpen = false, onCartWindowChange }) {
           c.cartKey === cartKey
             ? {
               ...c,
-              qty: c.qty + 1,
+              qty: c.qty + requested,
             }
             : c
         );
@@ -339,12 +410,22 @@ export default function POS({ cartWindowOpen = false, onCartWindowChange }) {
           name: p.name,
           price: Number(p.price),
           image: p.image,
-          qty: 1,
+          qty: requested,
           discount: 0,
         },
       ];
     });
-    success("Mahsulot qo'shildi", `${p.name} savatchaga qo'shildi.`);
+    success("Mahsulot qo'shildi", `${p.name} savatchaga ${requested} dona qo'shildi.`);
+    return true;
+  };
+
+  const openQuickAdd = (product) => {
+    setQuickAddProduct(product);
+    setQuickAddQuantity("1");
+  };
+
+  const confirmQuickAdd = (quantity) => {
+    if (addToCart(quickAddProduct, quantity)) setQuickAddProduct(null);
   };
 
   /* =====================================================
@@ -359,7 +440,7 @@ export default function POS({ cartWindowOpen = false, onCartWindowChange }) {
       const otherQty = previous
         .filter((item) => item.id === current.id && item.cartKey !== cartKey)
         .reduce((sum, item) => sum + item.qty, 0);
-      const available = product ? Number(product.stock) - otherQty : Infinity;
+      const available = product ? availableStock(product) - otherQty : Infinity;
       const nextQty = Math.max(0, Math.min(current.qty + delta, available));
       return previous
         .map((item) => item.cartKey === cartKey ? { ...item, qty: nextQty } : item)
@@ -379,7 +460,7 @@ export default function POS({ cartWindowOpen = false, onCartWindowChange }) {
       const otherQty = previous
         .filter((item) => item.id === current.id && item.cartKey !== cartKey)
         .reduce((sum, item) => sum + item.qty, 0);
-      const available = product ? Number(product.stock) - otherQty : Infinity;
+      const available = product ? availableStock(product) - otherQty : Infinity;
       const nextQty = Math.max(0, Math.min(newQty, available));
       return previous
         .map((item) => item.cartKey === cartKey ? { ...item, qty: nextQty } : item)
@@ -402,37 +483,105 @@ export default function POS({ cartWindowOpen = false, onCartWindowChange }) {
     setGlobalDiscount(0);
   };
 
+  const requestSaveOrder = () => {
+    if (!cart.length) { warning("Buyurtma bo‘sh", "Avval mahsulot tanlang."); return false; }
+    if (!customerName.trim()) { setCustomerError("Mijoz ismini kiriting."); return false; }
+    if (!/^\d{9}$/.test(phoneDigits(customerPhone))) { setCustomerError("Telefon raqamini 9 ta raqam bilan kiriting."); return false; }
+    let products = productList;
+    try { const savedProducts = JSON.parse(localStorage.getItem("crm_products") || "null"); if (Array.isArray(savedProducts)) products = savedProducts; } catch {}
+    const reservations = readReservedQuantities(activeReservationOrderId);
+    const quantities = cart.reduce((result, item) => { result[String(item.id)] = (result[String(item.id)] || 0) + Number(item.qty || 0); return result; }, {});
+    const insufficient = Object.entries(quantities).find(([id, quantity]) => quantity > Math.max(0, Number(products.find((product) => String(product.id) === id)?.stock || 0) - Number(reservations[id] || 0)));
+    if (insufficient) { setProductList(products); warning("Tovar yetarli emas", "Boshqa buyurtmalarda band qilingan miqdorni tekshiring."); return false; }
+    const now = new Date().toISOString();
+    const saved = onSaveOrder?.({
+      id: activeReservationOrderId || crypto.randomUUID(),
+      orderNumber: initialOrderDraft?.orderNumber || ("B-" + Date.now().toString().slice(-6)),
+      status: "reserved",
+      cart,
+      customerName: customerName.trim(),
+      customerPhone: phoneDigits(customerPhone),
+      globalDiscount,
+      subtotal,
+      discountAmount: discountAmt,
+      total: Math.round(total),
+      deliveryAddress,
+      addresses,
+      selectedAddressId,
+      addressConfirmed,
+      employeeId: currentUser?.type === "employee" ? currentUser.id : null,
+      employeeName: currentUser?.type === "employee" ? currentUser.name : "",
+      openedAt: initialOrderDraft?.openedAt || draftOpenedAt || now,
+      updatedAt: now,
+      createdAt: initialOrderDraft?.createdAt || now,
+    });
+    if (!saved) { warning("Buyurtma saqlanmadi", "Ma’lumotni saqlash imkoni bo‘lmadi. Qayta urinib ko‘ring."); return false; }
+    setCart([]);
+    setCustomerName("");
+    setCustomerPhone("");
+    setCustomerError("");
+    setDeliveryAddress("");
+    setAddresses([]);
+    setSelectedAddressId(null);
+    setAddressConfirmed(false);
+    setAddressError("");
+    setGlobalDiscount(0);
+    success("Buyurtma vaqtincha saqlandi", "Mahsulotlar buyurtma uchun band qilindi.");
+    return true;
+  };
+  if (saveOrderActionRef) saveOrderActionRef.current = requestSaveOrder;
+
+  const requestSaveSaleDraft = () => {
+    if (!cart.length) {
+      warning("Savatcha bo‘sh", "Saqlash uchun avval mahsulot tanlang.");
+      return;
+    }
+    setCustomerError("");
+    setSaveDraftOpen(true);
+  };
+  if (saveDraftActionRef) saveDraftActionRef.current = requestSaveSaleDraft;
+
+  const confirmSaveSaleDraft = () => {
+    const saved = onSaveSaleDraft?.({
+      id: crypto.randomUUID(),
+      cart,
+      customerName: customerName.trim(),
+      customerPhone,
+      globalDiscount,
+      deliveryAddress,
+      addresses,
+      selectedAddressId,
+      addressConfirmed,
+      openedAt: draftOpenedAt || new Date().toISOString(),
+      savedAt: new Date().toISOString(),
+    });
+    if (!saved) {
+      warning("Sotuv saqlanmadi", "Xotirada joy yetarli emas. Qayta urinib ko‘ring.");
+      return;
+    }
+    setSaveDraftOpen(false);
+    setCart([]);
+    setCustomerName("");
+    setCustomerPhone("");
+    setCustomerError("");
+    setDeliveryAddress("");
+    setAddresses([]);
+    setSelectedAddressId(null);
+    setAddressConfirmed(false);
+    setAddressError("");
+    setGlobalDiscount(0);
+    success("Sotuv qoralamaga saqlandi", "Saqlangan sotuvni Qoralama bo‘limidan davom ettirishingiz mumkin.");
+  };
+
   /* =====================================================
      EDIT PRODUCT
   ===================================================== */
 
-  const handleOpenEditModal = (e, p) => {
-    e.stopPropagation();
-
-    setEditingProduct(p);
-
-    setFormData({
-      name: p.name,
-      category:
-        p.category || "Maishiy kimyo",
-      price: p.price,
-      stock: p.stock,
-      image: p.image || "??",
-    });
-
-    setIsModalOpen(true);
-  };
 
   /* =====================================================
      DELETE MODAL
   ===================================================== */
 
-  const handleDeleteClick = (e, id) => {
-    e.stopPropagation();
-
-    setProductToDeleteId(id);
-    setDeleteModalOpen(true);
-  };
 
   const confirmDeleteProduct = () => {
     if (productToDeleteId !== null) {
@@ -582,7 +731,19 @@ export default function POS({ cartWindowOpen = false, onCartWindowChange }) {
     (sum, c) => sum + c.qty,
     0
   );
+  const canSaveOrder = Boolean(orderMode && cart.length && customerName.trim() && /^\d{9}$/.test(phoneDigits(customerPhone)));
+  useEffect(() => { onOrderSaveAvailabilityChange?.(canSaveOrder); }, [canSaveOrder, onOrderSaveAvailabilityChange]);
 
+  const savedReceiptAddresses = completedSale?.deliveryAddresses?.length
+    ? completedSale.deliveryAddresses
+    : addresses;
+  const receiptAddressRows = savedReceiptAddresses
+    .filter((address) => address.address?.trim())
+    .map((address) => address.address.trim());
+  if (!receiptAddressRows.length) {
+    const address = completedSale?.deliveryAddress || deliveryAddress;
+    if (address?.trim()) receiptAddressRows.push(address.trim());
+  }
   /* =====================================================
      RECEIPT OPEN
   ===================================================== */
@@ -634,6 +795,10 @@ export default function POS({ cartWindowOpen = false, onCartWindowChange }) {
   ===================================================== */
 
   const handleCloseReceipt = () => {
+    if (paymentComplete) {
+      handleNewSale();
+      return;
+    }
     setReceiptOpen(false);
   };
 
@@ -674,9 +839,9 @@ export default function POS({ cartWindowOpen = false, onCartWindowChange }) {
 
     setCustomerError("");
     setAddressError("");
-    setPaymentAmount("");
+    setPaymentAmount(orderMode ? String(Math.round(total)) : "");
     setPaymentMethod("cash");
-    setPaymentCard({ firstName: "", lastName: "", number: "" });
+    setSelectedCardId("");
     setDebtDueDate(getDefaultDebtDueDate());
     setPaymentError("");
     setPaymentComplete(false);
@@ -695,31 +860,30 @@ export default function POS({ cartWindowOpen = false, onCartWindowChange }) {
 
   const confirmPayment = () => {
     if (!paymentOpen || paymentComplete || paymentSubmittingRef.current || cart.length === 0) return;
+    const currentProducts = JSON.parse(localStorage.getItem("crm_products") || "[]");
+    const currentReservations = readReservedQuantities(activeReservationOrderId);
+    const insufficient = cart.find((item) => cart.filter((line) => String(line.id) === String(item.id)).reduce((sum, line) => sum + Number(line.qty), 0) > Math.max(0, Number(currentProducts.find((product) => String(product.id) === String(item.id))?.stock || 0) - Number(currentReservations[String(item.id)] || 0)));
+    if (insufficient) { setProductList(currentProducts); setPaymentError(`${insufficient.name}: band qilinmagan mahsulot yetarli emas. Miqdorni kamaytiring.`); return; }
     const saleTotal = Math.round(total);
     const amount = paymentAmount === ""
-      ? saleTotal
+      ? 0
       : Math.min(saleTotal, Math.max(0, Number(paymentAmount) || 0));
     if (amount < saleTotal && !debtDueDate) {
       setPaymentError("Qolgan qarzni qaytarish muddatini tanlang.");
       return;
     }
+    let receivingCard = null;
     if (amount > 0 && paymentMethod === "card") {
-      if (!paymentCard.firstName.trim() || !paymentCard.lastName.trim()) {
-        setPaymentError("Karta egasining ismi va familiyasini kiriting.");
-        return;
-      }
-      if (!startsWithCapital(paymentCard.firstName) || !startsWithCapital(paymentCard.lastName)) {
-        setPaymentError("Ism va familiyani bosh harf bilan boshlang.");
-        return;
-      }
-      if (paymentCard.number.replace(/\D/g, "").length !== 16) {
-        setPaymentError("16 xonali karta raqamini kiriting.");
+      try {
+        receivingCard = resolveReceivingCard(selectedCardId);
+      } catch (cause) {
+        setPaymentError(cause.message);
         return;
       }
     }
     paymentSubmittingRef.current = true;
     const remainingDebt = Math.max(0, saleTotal - amount);
-    const trimmedName = customerName.trim();
+    const trimmedName = capitalizeCustomerName(customerName.trim());
     const trimmedPhone = customerPhone.trim();
     const typedAddress = deliveryAddress.trim();
 
@@ -738,16 +902,12 @@ export default function POS({ cartWindowOpen = false, onCartWindowChange }) {
        CUSTOMER
     ================================================= */
 
-    const savedCustomers =
-      localStorage.getItem(
-        "crm_customers"
-      );
-
-    let customersList =
-      savedCustomers
-        ? JSON.parse(savedCustomers)
+    const savedCustomers = localStorage.getItem(customerStorageKey);
+    const customersList = savedCustomers !== null
+      ? JSON.parse(savedCustomers)
+      : customerStorageKey === "crm_additional_pos_customers"
+        ? []
         : initialCustomers.map((customer) => ({ ...customer }));
-
     const existingIndex =
       customersList.findIndex(
         (c) =>
@@ -769,7 +929,7 @@ export default function POS({ cartWindowOpen = false, onCartWindowChange }) {
       customersList[existingIndex] = {
         ...customersList[existingIndex],
         phone: trimmedPhone
-          ? `+998 ${trimmedPhone}`
+          ? `+998 ${formatUzPhone(trimmedPhone)}`
           : customersList[
             existingIndex
           ].phone,
@@ -802,7 +962,7 @@ export default function POS({ cartWindowOpen = false, onCartWindowChange }) {
         id: customerId,
         name: trimmedName,
         phone: trimmedPhone
-          ? `+998 ${trimmedPhone}`
+          ? `+998 ${formatUzPhone(trimmedPhone)}`
           : "Ko'rsatilmagan",
         region: "Toshkent",
         status: remainingDebt > 0 ? "debtor" : "active",
@@ -822,7 +982,7 @@ export default function POS({ cartWindowOpen = false, onCartWindowChange }) {
     }
 
     localStorage.setItem(
-      "crm_customers",
+      customerStorageKey,
       JSON.stringify(customersList)
     );
 
@@ -841,12 +1001,15 @@ export default function POS({ cartWindowOpen = false, onCartWindowChange }) {
     ================================================= */
 
     const sale = {
-      id: `S-${now.getTime()}`,
+      id: nextDocumentNumber(JSON.parse(localStorage.getItem(salesStorageKey) || "[]"), salesDocumentType, now),
 
       receiptNumber:
         saleReceiptNumber,
 
       customerId,
+      employeeId: currentUser?.type === "employee" ? currentUser.id : null,
+      employeeName: currentUser?.type === "employee" ? currentUser.name : "",
+      sourceOrderId: activeReservationOrderId || null,
       customer: trimmedName,
       products: cart.length,
       productIds: cart.map((item) => item.id),
@@ -857,12 +1020,13 @@ export default function POS({ cartWindowOpen = false, onCartWindowChange }) {
       debtDueDate: remainingDebt > 0 ? debtDueDate : "",
       status: amount === 0 ? "debt" : remainingDebt > 0 ? "partial" : "paid",
       payment: amount === 0 ? "Qarz" : paymentMethod === "card" ? "Karta" : "Naqd",
-      cardLast4: amount > 0 && paymentMethod === "card" ? paymentCard.number.replace(/\D/g, "").slice(-4) : "",
+      receivingCard,
+      cardLast4: receivingCard?.number.slice(-4) || "",
 
       customerName: trimmedName,
 
       customerPhone: trimmedPhone
-        ? `+998 ${trimmedPhone}`
+        ? `+998 ${formatUzPhone(trimmedPhone)}`
         : "Ko'rsatilmagan",
 
       deliveryAddress: primaryAddress,
@@ -910,7 +1074,7 @@ export default function POS({ cartWindowOpen = false, onCartWindowChange }) {
 
     const savedSales =
       localStorage.getItem(
-        "crm_sales"
+        salesStorageKey
       );
 
     let salesList =
@@ -921,7 +1085,7 @@ export default function POS({ cartWindowOpen = false, onCartWindowChange }) {
     salesList.unshift(sale);
 
     localStorage.setItem(
-      "crm_sales",
+      salesStorageKey,
       JSON.stringify(salesList)
     );
 
@@ -930,7 +1094,7 @@ export default function POS({ cartWindowOpen = false, onCartWindowChange }) {
     ================================================= */
 
     const updatedProducts =
-      productList.map((p) => {
+      currentProducts.map((p) => {
         const purchasedQty = cart
           .filter((item) => item.id === p.id)
           .reduce((sum, item) => sum + Number(item.qty), 0);
@@ -953,6 +1117,11 @@ export default function POS({ cartWindowOpen = false, onCartWindowChange }) {
       JSON.stringify(updatedProducts)
     );
     setProductList(updatedProducts);
+    if (activeReservationOrderId) {
+      removeOrder(activeReservationOrderId);
+      setActiveReservationOrderId(null);
+    }
+    setCompletedSale(sale);
     } catch {
       paymentSubmittingRef.current = false;
       setPaymentError("To'lovni saqlab bo'lmadi. Qayta urinib ko'ring.");
@@ -971,10 +1140,11 @@ export default function POS({ cartWindowOpen = false, onCartWindowChange }) {
       paymentSoundRef.current.play().catch(() => {});
     }
     setPaymentError("");
-    setPaymentCard({ firstName: "", lastName: "", number: "" });
-    setDebtDueDate(getDefaultDebtDueDate());
     clearTimeout(paymentTimerRef.current);
-    paymentTimerRef.current = setTimeout(handleNewSale, 2000);
+    paymentTimerRef.current = setTimeout(() => {
+      setShowPaymentAnimation(false);
+      setReceiptOpen(true);
+    }, 2000);
   };
 
   /* =====================================================
@@ -982,6 +1152,8 @@ export default function POS({ cartWindowOpen = false, onCartWindowChange }) {
   ===================================================== */
 
   const handleNewSale = () => {
+    setActiveReservationOrderId(null);
+    setCompletedSale(null);
     clearTimeout(paymentTimerRef.current);
     if (paymentSoundRef.current) {
       paymentSoundRef.current.pause();
@@ -1012,9 +1184,10 @@ export default function POS({ cartWindowOpen = false, onCartWindowChange }) {
     setShowPaymentAnimation(false);
     setPaymentAmount("");
     setPaymentMethod("cash");
-    setPaymentCard({ firstName: "", lastName: "", number: "" });
+    setSelectedCardId("");
     setPaymentError("");
     setPaidAmount(0);
+    if (orderMode) onOrderSaleComplete?.();
   };
 
   /* =====================================================
@@ -1023,9 +1196,17 @@ export default function POS({ cartWindowOpen = false, onCartWindowChange }) {
 
   const cartPanelProps = {
     cart,
+    reservationMode: orderMode,
+    allowReservationCheckout: orderMode,
 
     customerName,
     setCustomerName,
+    customerSuggestions: readPosCustomerSuggestions(customerStorageKey, salesStorageKey, customerName, customerPhone),
+    selectCustomer: (customer) => {
+      setCustomerName(customer.name);
+      setCustomerPhone(customer.phone);
+      setCustomerError("");
+    },
 
     customerPhone,
     setCustomerPhone,
@@ -1058,6 +1239,7 @@ export default function POS({ cartWindowOpen = false, onCartWindowChange }) {
 
     handleCheckout,
     handleOpenReceipt,
+    onSaveDraft: requestSaveSaleDraft,
 
     customerError,
     paymentOpen,
@@ -1065,8 +1247,8 @@ export default function POS({ cartWindowOpen = false, onCartWindowChange }) {
     setPaymentAmount,
     paymentMethod,
     setPaymentMethod,
-    paymentCard,
-    setPaymentCard,
+    selectedCardId,
+    setSelectedCardId,
     debtDueDate,
     setDebtDueDate,
     paymentError,
@@ -1083,6 +1265,16 @@ export default function POS({ cartWindowOpen = false, onCartWindowChange }) {
 
   return (
     <div className="pos-container pos-split-layout">
+      {quickAddProduct && (
+        <ProductQuickAddModal
+          product={quickAddProduct}
+          suppliers={suppliers}
+          quantity={quickAddQuantity}
+          onQuantityChange={setQuickAddQuantity}
+          onAdd={confirmQuickAdd}
+          onClose={() => setQuickAddProduct(null)}
+        />
+      )}
 
       {/* =================================================
           PRODUCTS SECTION
@@ -1092,16 +1284,16 @@ export default function POS({ cartWindowOpen = false, onCartWindowChange }) {
 
         <div className="pos-header">
           <h1 className="pos-title">
-            {tx(text(
+            {headingText ? tx(headingText) : tx(text(
               "title",
-              "Yangi Sotuv"
+              orderMode ? "Yangi buyurtma" : "Yangi Sotuv"
             ))}
           </h1>
 
           <p className="pos-subtitle">
             {tx(text(
               "subtitle",
-              "Mahsulot tanlang va savatchaga qo'shing"
+              orderMode ? "Mahsulotlarni tanlang, mijozni belgilang va buyurtmani band qiling" : "Mahsulot tanlang va savatchaga qo'shing"
             ))}
           </p>
           {addresses.length > 1 && selectedAddressId && (
@@ -1127,7 +1319,7 @@ export default function POS({ cartWindowOpen = false, onCartWindowChange }) {
               value={search}
               onChange={(e) =>
                 setSearch(
-                  e.target.value
+                  e.target.value.replace(/(^|\s)(\S)/g, (_, space, letter) => space + letter.toLocaleUpperCase("uz-UZ"))
                 )
               }
               placeholder={tx("Mahsulot qidirish...")}
@@ -1138,6 +1330,7 @@ export default function POS({ cartWindowOpen = false, onCartWindowChange }) {
             />
           </div>
 
+          <SalesProductFilter products={productList} value={categoryFilter} onChange={setCategoryFilter} placeholder="Kategoriya..." />
         </div>
 
         {/* =================================================
@@ -1163,15 +1356,14 @@ export default function POS({ cartWindowOpen = false, onCartWindowChange }) {
                     c.id === p.id
                 );
 
-              const isOutOfStock =
-                Number(p.stock) === 0;
+              const productAvailable = availableStock(p);
+              const productReserved = Number(reservedStock[String(p.id)] || 0);
+              const isOutOfStock = productAvailable === 0;
 
               return (
                 <div
                   key={p.id}
-                  onClick={() =>
-                    addToCart(p)
-                  }
+                  onClick={() => openQuickAdd(p)}
                   className={`product-card ${inCart
                     ? "in-cart"
                     : ""
@@ -1180,13 +1372,12 @@ export default function POS({ cartWindowOpen = false, onCartWindowChange }) {
                       : ""
                     }`}
                   role="button"
-                  tabIndex={isOutOfStock ? -1 : 0}
-                  aria-disabled={isOutOfStock}
-                  aria-label={tx(`${p.name} mahsulotini savatchaga qo'shish`)}
+                  tabIndex={0}
+                  aria-label={tx(`${p.name} tafsilotlarini ochish`)}
                   onKeyDown={(event) => {
-                    if (!isOutOfStock && (event.key === "Enter" || event.key === " ")) {
+                    if (event.key === "Enter" || event.key === " ") {
                       event.preventDefault();
-                      addToCart(p);
+                      openQuickAdd(p);
                     }
                   }}
                 >
@@ -1195,77 +1386,34 @@ export default function POS({ cartWindowOpen = false, onCartWindowChange }) {
 
                     <div className="pos-product-head">
                       <div className="product-name">
-                        {p.name}
+                        <span className="pos-product-label">{tx("Nomi:")}</span> {p.name}
                       </div>
-                      <span
-                        className={`pos-product-stock ${p.stock < 5
-                          ? "low-stock"
-                          : ""
-                          }`}
-                      >
-                        {tx(isOutOfStock ? "Tugagan" : `${p.stock} dona`)}
-                      </span>
+                      <div className="pos-product-stock-stack">
+                        <span className={`pos-product-stock ${productAvailable < 5 ? "low-stock" : ""}`}>
+                          {tx(isOutOfStock ? "Tugagan" : `Qoldiq: ${productAvailable} dona`)}
+                        </span>
+                        {productReserved > 0 && <span className="pos-product-reserved">{tx("Band qilingan")}: {tx(productReserved)} {tx("dona")}</span>}
+                      </div>
                     </div>
 
-                    <div className="product-category">{tx(p.category || "Mahsulot")}</div>
+                    <div className="product-category"><span className="pos-product-label">{tx("Kategoriya:")}</span> {p.category ? tx(p.category) : tx("Ko'rsatilmagan")}</div>
+                    <div className="pos-product-meta">{[p.brand && `${tx("Brend:")} ${p.brand}`, p.sku && `SKU: ${p.sku}`].filter(Boolean).join(" · ")}</div>
 
                     <div className="product-footer">
 
-                      <span className="product-price">
-                        {tx(Number(
-                          p.price
-                        ).toLocaleString())}{" "}{tx("so'm")}</span>
+                      <span className="product-price"><span className="pos-product-label">{tx("Narxi:")}</span> {formatCurrency(p.price)}</span>
 
                     </div>
 
                     <button
                       type="button"
                       className="pos-product-add-btn"
-                      disabled={isOutOfStock}
                       onClick={(event) => {
                         event.stopPropagation();
-                        addToCart(p);
+                        openQuickAdd(p);
                       }}
                     >
-                      <FiShoppingCart size={17} />{tx(" Savatchaga qo'shish")}</button>
-
-                    {/* CARD ACTIONS */}
-
-                    <div className="product-card-actions">
-
-                      <button
-                        type="button"
-                        className="card-action-btn edit"
-                        onClick={(e) =>
-                          handleOpenEditModal(
-                            e,
-                            p
-                          )
-                        }
-                        title={tx("Tahrirlash")}
-                      >
-                        <FiEdit2
-                          size={13}
-                        />
-                      </button>
-
-                      <button
-                        type="button"
-                        className="card-action-btn delete"
-                        onClick={(e) =>
-                          handleDeleteClick(
-                            e,
-                            p.id
-                          )
-                        }
-                        title={tx("O'chirish")}
-                      >
-                        <FiTrash2
-                          size={13}
-                        />
-                      </button>
-
-                    </div>
+                      <FiShoppingCart size={17} />{tx("Savatga qo'shish")}</button>
 
                   </div>
 
@@ -1289,7 +1437,7 @@ export default function POS({ cartWindowOpen = false, onCartWindowChange }) {
       >
         <FiShoppingCart size={22} />
         <span>{tx("Savatcha ")}<small>({tx(cart.length)})</small></span>
-        <strong>{tx(total.toLocaleString())}{tx(" so'm")}</strong>
+        <strong>{formatCurrency(total)}</strong>
       </button>
 
       <div
@@ -1299,7 +1447,7 @@ export default function POS({ cartWindowOpen = false, onCartWindowChange }) {
         aria-label={tx(compactCart ? "Savatcha va buyurtma" : undefined)}
       >
         <div className="pos-cart-window-body" ref={cartWindowBodyRef}>
-          <CartPanelContent {...cartPanelProps} />
+          <CartPanelContent {...cartPanelProps} hideSaveDraftButton={hideSaveDraftButton} />
         </div>
       </div>
 
@@ -1369,14 +1517,11 @@ export default function POS({ cartWindowOpen = false, onCartWindowChange }) {
                   type="number"
                   required
                   min="0"
-                  value={
-                    formData.price
-                  }
+                  value={moneyInputValue(formData.price, false)}
                   onChange={(e) =>
                     setFormData({
                       ...formData,
-                      price: e.target
-                        .value,
+                      price: String(toBaseMoney(e.target.value)),
                     })
                   }
                   placeholder={tx("10000")}
@@ -1499,7 +1644,7 @@ export default function POS({ cartWindowOpen = false, onCartWindowChange }) {
           RECEIPT MODAL
       ================================================= */}
 
-      {receiptOpen && (
+      {receiptOpen && createPortal(
         <div
           className="receipt-modal-overlay"
           id="receipt-modal"
@@ -1540,7 +1685,7 @@ export default function POS({ cartWindowOpen = false, onCartWindowChange }) {
 
               <div className="receipt-shop-header">
 
-                <h1>{tx("CRM DO'KON")}</h1>
+                <h1>{companyName}</h1>
 
                 <p>{tx("Sotuv cheki")}</p>
 
@@ -1556,7 +1701,7 @@ export default function POS({ cartWindowOpen = false, onCartWindowChange }) {
                   <span>{tx("Chek raqami")}</span>
 
                   <strong>
-                    {receiptNumber}
+                    {completedSale?.receiptNumber || receiptNumber}
                   </strong>
                 </div>
 
@@ -1564,7 +1709,7 @@ export default function POS({ cartWindowOpen = false, onCartWindowChange }) {
                   <span>{tx("Sana")}</span>
 
                   <strong>
-                    {tx(receiptDate)}
+                    {tx(completedSale?.formattedDate || receiptDate)}
                   </strong>
                 </div>
 
@@ -1584,7 +1729,7 @@ export default function POS({ cartWindowOpen = false, onCartWindowChange }) {
                   <span>{tx("Ism:")}</span>
 
                   <strong>
-                    {customerName || tx("Ko'rsatilmagan")}
+                    {completedSale?.customerName || customerName || tx("Ko'rsatilmagan")}
                   </strong>
 
                 </div>
@@ -1594,13 +1739,17 @@ export default function POS({ cartWindowOpen = false, onCartWindowChange }) {
                   <span>{tx("Telefon:")}</span>
 
                   <strong>
-                    {tx(customerPhone
-                      ? `+998 ${customerPhone}`
-                      : "Ko'rsatilmagan")}
+                    {tx(completedSale?.customerPhone || (customerPhone ? `+998 ${formatUzPhone(customerPhone)}` : "Ko'rsatilmagan"))}
                   </strong>
 
                 </div>
 
+                {receiptAddressRows.map((address, index) => (
+                  <div className="receipt-customer-row receipt-address-row" key={`${index}-${address}`}>
+                    <span>{tx("Yetkazish manzili")}{receiptAddressRows.length > 1 ? ` ${index + 1}` : ""}:</span>
+                    <strong>{address}</strong>
+                  </div>
+                ))}
               </div>
 
               <div className="receipt-line" />
@@ -1611,10 +1760,10 @@ export default function POS({ cartWindowOpen = false, onCartWindowChange }) {
 
                 <div className="receipt-products-title">{tx("Mahsulotlar")}</div>
 
-                {cart.map(
+                {(completedSale?.items || cart).map(
                   (item, index) => (
                     <div
-                      key={item.cartKey}
+                      key={item.cartKey || `${item.id}:${index}`}
                       className="receipt-product"
                     >
 
@@ -1634,19 +1783,17 @@ export default function POS({ cartWindowOpen = false, onCartWindowChange }) {
 
                         <span>
                           {tx(item.qty)}{tx(" dona ?")}{" "}
-                          {tx(Number(
-                            item.price
-                          ).toLocaleString())}{" "}{tx("so'm")}</span>
+                          {formatCurrency(item.price)}</span>
 
                         <strong>
-                          {tx((
+                          {formatCurrency((
                             Number(
                               item.price
                             ) *
                             Number(
                               item.qty
                             )
-                          ).toLocaleString())}{" "}{tx("so'm")}</strong>
+                          ))}</strong>
 
                       </div>
 
@@ -1667,19 +1814,19 @@ export default function POS({ cartWindowOpen = false, onCartWindowChange }) {
                   <span>{tx("Mahsulotlar jami")}</span>
 
                   <strong>
-                    {tx(subtotal.toLocaleString())}{" "}{tx("so'm")}</strong>
+                    {formatCurrency(completedSale?.subtotal ?? subtotal)}</strong>
 
                 </div>
 
-                {globalDiscount > 0 && (
+                {(completedSale?.discountPercent ?? globalDiscount) > 0 && (
                   <div className="receipt-summary-row discount">
 
                     <span>{tx("Chegirma")}{" "}
-                      ({tx(globalDiscount)}%)
+                      ({tx(completedSale?.discountPercent ?? globalDiscount)}%)
                     </span>
 
                     <strong>
-                      -{tx(discountAmt.toLocaleString())}{" "}{tx("so'm")}</strong>
+                      -{formatCurrency(completedSale?.discountAmount ?? discountAmt)}</strong>
 
                   </div>
                 )}
@@ -1689,7 +1836,7 @@ export default function POS({ cartWindowOpen = false, onCartWindowChange }) {
                   <span>{tx("JAMI TO'LOV")}</span>
 
                   <strong>
-                    {tx(total.toLocaleString())}{" "}{tx("so'm")}</strong>
+                    {formatCurrency(completedSale?.total ?? total)}</strong>
 
                 </div>
 
@@ -1697,13 +1844,15 @@ export default function POS({ cartWindowOpen = false, onCartWindowChange }) {
 
               <div className="receipt-line" />
 
+              <ReceiptPaymentDetails sale={completedSale} />
+
               {/* FOOTER */}
 
               <div className="receipt-footer">
 
                 <p>{tx("Xaridingiz uchun rahmat!")}</p>
 
-                <span>{tx("CRM DO'KON")}</span>
+                <span>{companyName}</span>
 
               </div>
 
@@ -1738,7 +1887,9 @@ export default function POS({ cartWindowOpen = false, onCartWindowChange }) {
 
           </div>
 
-        </div>
+        </div>,
+
+        document.getElementById("main-modal-root") || document.body
       )}
 
       {showPaymentAnimation && createPortal(
@@ -1748,6 +1899,20 @@ export default function POS({ cartWindowOpen = false, onCartWindowChange }) {
         />,
         document.getElementById("main-modal-root") || document.body
       )}
+
+      <Modal contentOnly open={saveDraftOpen} onClose={() => setSaveDraftOpen(false)} title="Sotuvni saqlashni tasdiqlang" subtitle="Savat keyin davom ettirish uchun Qoralamaga saqlanadi" icon={FiShoppingCart} width={480}>
+        <div className="pos-save-draft-summary">
+          <div><span>{tx("Mijoz")}</span><strong>{customerName.trim() || "Ism kiritilmagan"}</strong></div>
+          <div><span>{tx("Telefon")}</span><strong>{customerPhone ? `+998 ${formatUzPhone(customerPhone)}` : "Kiritilmagan"}</strong></div>
+          <div><span>{tx("Savdo ochilgan vaqt")}</span><strong>{new Intl.DateTimeFormat("uz-UZ", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Tashkent" }).format(new Date(draftOpenedAt || Date.now()))}</strong></div>
+          <div><span>{tx("Mahsulotlar")}</span><strong>{cart.length}{tx("xil ·")}{cart.reduce((sum, item) => sum + Number(item.qty || 0), 0)}{tx("dona")}</strong></div>
+          <div className="pos-save-draft-total"><span>{tx("Jami")}</span><strong>{formatCurrency(total)}</strong></div>
+        </div>
+        <div className="pos-save-draft-actions">
+          <button type="button" onClick={() => setSaveDraftOpen(false)}>{tx("Bekor qilish")}</button>
+          <button type="button" onClick={confirmSaveSaleDraft}>{tx("Ha, saqlash")}</button>
+        </div>
+      </Modal>
 
     </div>
   );

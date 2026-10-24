@@ -128,7 +128,7 @@
 }
 
 #main-modal-root > .crm-content-modal > :is(
-  .sales-edit-modal, .sales-delete-modal, .pos-modal-content, .modal-card
+  .sales-edit-modal, .sales-delete-modal, .pos-modal-content, .modal-card, .product-quick-modal
 ) {
   position: relative;
   min-width: 0;
@@ -140,10 +140,71 @@
   overscroll-behavior: contain;
   pointer-events: auto;
 }
-/* Keep the return form compact inside the shared content backdrop. */
+/* Keep shared modal cards compact. */
 #main-modal-root > .crm-content-modal > .modal-card {
   width: 100%;
   max-width: 500px;
   margin: 0;
   flex: 0 1 500px;
+}
+
+#main-modal-root > .crm-content-modal > .returns-create-panel {
+  max-width: 860px;
+  flex-basis: 860px;
+}
+
+#main-modal-root > .crm-content-modal > .returns-create-panel.has-sale-choices {
+  display: block;
+  height: auto;
+  max-height: 100%;
+  overflow: hidden;
+}
+
+.debt-highlight { background: var(--danger-light) !important; border: 1px solid var(--danger) !important; }
+.debt-highlight :is(.font-bold, .text-xs, .customers-stat__value, .customers-stat__label, svg) { color: var(--danger) !important; }
+.debt-highlight .customers-stat__icon { background: var(--danger-light) !important; color: var(--danger) !important; }
+.confirm-dialog-danger,
+.confirm-dialog-danger:hover {
+  background: var(--danger) !important;
+  color: #fff !important;
+}
+.confirm-dialog-danger:hover { filter: brightness(0.92); }
+.additional-pos-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: grid;
+  place-items: center;
+  background: rgba(15, 23, 42, 0.28);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+.additional-pos-loading-orb {
+  width: 72px;
+  height: 72px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--surface);
+  box-shadow: var(--shadow-lg);
+}
+
+.additional-pos-spinner {
+  width: 30px;
+  height: 30px;
+  border: 3px solid var(--border);
+  border-top-color: var(--brand);
+  border-right-color: var(--brand);
+  border-radius: 50%;
+  animation: additional-pos-spin 1s linear infinite;
+}
+
+@keyframes additional-pos-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .additional-pos-spinner { animation: none; }
 }

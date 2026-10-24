@@ -82,15 +82,16 @@ test("customer debt payments cap the amount at the outstanding balance", async (
   expect(host.querySelector(".customer-payment-submit").disabled).toBe(true);
 });
 
-test("cardholder name validation remains visible in the extracted debt modal", async () => {
+test("card payments require a configured receiving card", async () => {
   const props = {
     ...paymentProps(),
     method: "card",
-    cardForm: { number: "", firstName: "ali", lastName: "Valiyev" },
+    selectedCardId: "",
+    setSelectedCardId: jest.fn(),
     sale: { id: "S-test", amount: 100, debtBalance: 60, products: 0 },
     onSubmit: jest.fn(),
   };
   await act(async () => root.render(<DebtPaymentModal {...props} />));
-  expect(host.querySelectorAll('[aria-invalid="true"]')).toHaveLength(1);
-  expect(host.querySelector('[role="alert"]').textContent).toContain("Ism");
+  expect(host.querySelector("select").disabled).toBe(true);
+  expect(host.textContent).toContain("Direktor hali karta qo'shmagan");
 });

@@ -1,4 +1,4 @@
-import { fmt, statusVisual, stockVisual } from './dashboardHelpers';
+import { buildSalesChart, statusVisual, stockVisual } from './dashboardHelpers';
 import { KpiCard, CustomTooltip } from './DashboardWidgets';
 import { translateText as tx } from "../locales/translateText";
 import { useLanguage as useUILanguage, useLanguage } from "../context/LanguageContext";
@@ -26,6 +26,7 @@ import {
 } from "recharts";
 import { readDebtPayments, readPosSales, withDebtBalance } from "../data/debtPayments";
 import { readStockProducts, stockAlerts } from "../data/stockStore";
+import { formatCurrency } from "../data/currency";
 
 export default function Dashboard({
   onNavigate,
@@ -77,20 +78,7 @@ export default function Dashboard({
     .reduce((sum, sale) => sum + Math.max(0, Number(sale.netAmount || 0) - Number(sale.netCost || 0)), 0);
   const customerDebt = liveSales.reduce((sum, sale) => sum + Number(sale.netDebt || 0), 0);
   const supplierDebt = dashboardSuppliers.reduce((sum, supplier) => sum + Number(supplier.debt || 0), 0);
-  const asMoney = (amount) => `${Number(amount || 0).toLocaleString()} so'm`;
-  const chartSalesData = liveSales.reduce((days, sale) => {
-    const date = new Date(sale.createdAt || sale.date);
-    if (Number.isNaN(date.getTime())) return days;
-    const key = date.toISOString().slice(0, 10);
-    const entry = days.get(key) || { date: `${date.getDate()}.${String(date.getMonth() + 1).padStart(2, "0")}`, revenue: 0, profit: 0, expenses: 0 };
-    entry.revenue += Number(sale.netAmount || 0);
-    entry.profit += Math.max(0, Number(sale.netAmount || 0) - Number(sale.netCost || 0));
-    entry.expenses += Number(sale.netCost || 0);
-    days.set(key, entry);
-    return days;
-  }, new Map());
-  const salesData = Array.from(chartSalesData.entries()).sort(([a], [b]) => a.localeCompare(b)).map(([, value]) => value);
-  const monthlyData = salesData;
+  const asMoney = (amount) => formatCurrency(amount);
   const topProducts = Array.from(liveSales.reduce((items, sale) => {
     (sale.items || []).forEach((item) => {
       const current = items.get(String(item.id)) || { id: item.id, name: item.name || "Mahsulot", sold: 0, revenue: 0 };
@@ -174,11 +162,7 @@ export default function Dashboard({
      CHART DATA
   ===================================================== */
 
-  const data =
-    range === "7d" ||
-    range === "30d"
-      ? salesData
-      : monthlyData;
+  const data = buildSalesChart(liveSales, range);
 
   /* =====================================================
      RANGE
@@ -389,12 +373,13 @@ export default function Dashboard({
             "Bizdan qarzdor"
           ))}
           value={asMoney(customerDebt)}
+          debt
           sub={t(
             "dashboard.kpi.owedToUs.sub",
             "Mijozlarning qarzi"
           )}
-          color="var(--warning)"
-          bg="var(--warning-light)"
+          color="var(--danger)"
+          bg="var(--danger-light)"
           active={
             activeCard ===
             "customerDebt"
@@ -414,6 +399,7 @@ export default function Dashboard({
             "Biz qarzdor"
           ))}
           value={asMoney(supplierDebt)}
+          debt
           sub={t(
             "dashboard.kpi.weOwe.sub",
             "Ta'minotchilarga qarz"
@@ -627,7 +613,7 @@ export default function Dashboard({
                 />
 
                 <YAxis
-                  tickFormatter={(value) => tx(fmt(value))}
+                  tickFormatter={(value) => formatCurrency(value)}
                   tick={{
                     fontSize: 11,
                     fill:
@@ -908,9 +894,7 @@ export default function Dashboard({
                             "var(--brand)",
                         }}
                       >
-                        {tx(fmt(
-                          p.revenue
-                        ))}
+                        {formatCurrency(p.revenue)}
                       </span>
 
                     </div>
@@ -1136,7 +1120,7 @@ export default function Dashboard({
                               "var(--text-primary)",
                           }}
                         >
-                          {tx(sale.amount.toLocaleString())}{" "}{tx("so'm")}</td>
+                          {formatCurrency(sale.amount)}</td>
 
                         <td
                           className="px-5 py-3 text-xs"
@@ -1248,7 +1232,7 @@ export default function Dashboard({
                 type="button"
                 onClick={() =>
                   onNavigate(
-                    "inventory"
+                    "products-all"
                   )
                 }
                 className="text-xs font-medium hover:underline cursor-pointer"

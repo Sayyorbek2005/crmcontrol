@@ -2,12 +2,16 @@ import { translateText as tx } from "../locales/translateText";
 import { useLanguage as useUILanguage } from "../context/LanguageContext";
 import './Login.css';
 import { useState } from "react";
-import { Eye, EyeOff, Store, ArrowRight, CheckCircle2 } from "lucide-react";
+import { Eye, EyeOff, Store, ArrowRight, CheckCircle2, Lock } from "lucide-react";
 import { useLanguage } from "../context/LanguageContext";
 import { authenticate, getDirector, readLocalLogin, registerDirector } from "../data/accessStore";
-export default function Login({ onLogin, onRecover }) {
+import PasswordRecovery from "./PasswordRecovery";
+import { LOGIN_SCOPES, useLoginLock } from "../data/loginThrottle";
+import { useTenantCompanyName } from "../data/tenantBrand";
+export default function Login({ onLogin, tenantId, tenantInvite }) {
   useUILanguage();
   const { lang, setLang, t } = useLanguage();
+  const companyName = useTenantCompanyName(tenantId, tenantInvite);
   const [showPass, setShowPass] = useState(false);
   const [savedLogin] = useState(() => readLocalLogin());
   const [email, setEmail] = useState(() => savedLogin?.login || "");
@@ -15,8 +19,13 @@ export default function Login({ onLogin, onRecover }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [setupComplete, setSetupComplete] = useState(() => Boolean(getDirector()));
+  const [recovering, setRecovering] = useState(false);
+  const lock = useLoginLock(LOGIN_SCOPES.crm);
+  // Direktor hali yaratilmagan bo'lsa (birinchi sozlash) blok qo'llanmaydi.
+  const locked = setupComplete && lock.locked;
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (locked || loading) return;
     setError("");
     if (!email.trim() || password.length < 8) {
       setError("Login va kamida 8 belgili parol kiriting.");
@@ -33,6 +42,7 @@ export default function Login({ onLogin, onRecover }) {
       setError(err.message || "Kirish amalga oshmadi.");
     } finally {
       setLoading(false);
+      lock.refresh();
     }
   };
   const features = [
@@ -41,8 +51,8 @@ export default function Login({ onLogin, onRecover }) {
     t("login.feature.finance", "Moliyaviy analitika va hisobotlar"),
     t("login.feature.pos", "POS terminal va chek tizimi"),
   ];
-  return (  
-    
+  if (recovering) return <PasswordRecovery tenantId={tenantId} tenantInvite={tenantInvite} onBack={() => setRecovering(false)} onComplete={onLogin} />;
+  return (
     <div
       className="min-h-screen flex"
       style={{
@@ -107,7 +117,7 @@ export default function Login({ onLogin, onRecover }) {
                   fontFamily: "'Manrope',sans-serif",
                 }}
               >
-                UyMarket CRM
+                {companyName}
               </div>
               <div className="text-white/60 text-xs">{tx("Business Management Platform")}</div>
             </div>
@@ -147,8 +157,7 @@ export default function Login({ onLogin, onRecover }) {
           </div>
         </div>
 
-        <div className="relative text-white/35 text-xs">
-          © 2026 UyMarket CRM. {tx(t("login.footer", "Barcha huquqlar himoyalangan."))}
+        <div className="relative text-white/35 text-xs">© 2026 {companyName}. {tx(t("login.footer", "Barcha huquqlar himoyalangan."))}
         </div>
       </div>
 
@@ -171,7 +180,7 @@ export default function Login({ onLogin, onRecover }) {
                 color: "var(--text-primary)",
               }}
             >
-              UyMarket CRM
+              {companyName}
             </span>
           </div>
 
@@ -224,7 +233,7 @@ export default function Login({ onLogin, onRecover }) {
                 </label>
                 <button
                   type="button"
-                  onClick={onRecover}
+                  onClick={() => setRecovering(true)}
                   className="text-xs font-medium hover:opacity-70 transition-opacity"
                   style={{
                     color: "var(--brand)",
@@ -257,24 +266,29 @@ export default function Login({ onLogin, onRecover }) {
 
             {error && <div role="alert" className="text-sm" style={{ color: "var(--danger, #ef4444)" }}>
               <p>{tx(error)}</p>
-              {onRecover && <button type="button" onClick={onRecover} className="text-xs font-semibold mt-2 underline" style={{ color: "var(--brand)" }}>
-                {tx("Taklif havolasi orqali kirish ma'lumotlarini qayta o'rnatish")}
-              </button>}
+              <button type="button" onClick={() => setRecovering(true)} className="text-xs font-semibold mt-2 underline" style={{ color: "var(--brand)" }}>
+                {tx("Parolni tiklash")}
+              </button>
             </div>}
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || locked}
+              aria-live="polite"
               className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl font-display font-semibold text-white transition-all hover:opacity-90 active:scale-98 mt-2"
               style={{
                 fontFamily: "'Manrope',sans-serif",
                 background:
                   "linear-gradient(135deg,var(--brand) 0%,var(--brand-hover) 100%)",
                 boxShadow: "0 4px 16px rgba(37,99,235,0.35)",
-                opacity: loading ? 0.8 : 1,
-                cursor:"pointer",
+                opacity: loading ? 0.8 : locked ? 0.6 : 1,
+                cursor: locked ? "not-allowed" : "pointer",
               }}
             >
-              {loading ? (
+              {locked ? (
+                <>
+                  <Lock size={16} /> {tx("Qayta urinish")}: <span style={{ fontVariantNumeric: "tabular-nums" }}>{lock.label}</span>
+                </>
+              ) : loading ? (
                 <>
                   <span className="spinner" /> {tx(t("login.loading", "Yuklanmoqda..."))}
                 </>

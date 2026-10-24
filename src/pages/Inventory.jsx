@@ -12,6 +12,7 @@ import {
   X,
 } from "lucide-react";
 import { readStockProducts, stockAlerts, stockMinimum } from "../data/stockStore";
+import { formatCurrency } from "../data/currency";
 
 export default function Inventory() {
   useUILanguage();
@@ -125,7 +126,7 @@ export default function Inventory() {
           },
           {
             label: "Ombor qiymati",
-            value: (totalValue / 1000000).toFixed(1) + " mln so'm",
+            value: formatCurrency(totalValue),
             icon: DollarSign,
             color: "var(--success)",
             bg: "var(--success-light)",

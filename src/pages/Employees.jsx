@@ -1,4 +1,5 @@
 import { translateText as tx } from "../locales/translateText";
+import { formatCurrency } from "../data/currency";
 import { useLanguage as useUILanguage } from "../context/LanguageContext";
 import './Employees.css';
 import { useState } from "react";
@@ -17,7 +18,8 @@ import PhoneInput from "../components/PhoneInput";
 import { useToast } from "../context/ToastContext";
 import { ACCESS_SECTIONS, createCredentials, loginExists } from "../data/accessStore";
 
-const ROLES = ["Admin", "Manager", "Kassir", "Ombor"];
+const ROLES = ["Admin", "Manager", "Kassir", "Ombor", "Boshqa"];
+const cleanRole = (value) => value.replace(/[^\p{L}\s]/gu, "").replace(/\s+/g, " ").replace(/^\p{L}/u, (letter) => letter.toLocaleUpperCase("uz-UZ"));
 
 const roleColors = {
   Admin: {
@@ -45,10 +47,12 @@ export default function Employees({ onNavigate }) {
     try { return readEmployees(); } catch { return employeesSeed; }
   });
   const [open, setOpen] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   const [form, setForm] = useState({
     name: "",
     role: "Kassir",
+    customRole: "",
     phone: "",
     status: "active",
     login: "",
@@ -62,10 +66,12 @@ export default function Employees({ onNavigate }) {
   const digits = form.phone.replace(/\D/g, "");
   const phoneValid = digits.length === 12;
 
-  const submit = async () => {
+  const submit = () => {
     if (!form.name.trim()) {
       return setErr("Xodim ismini kiriting");
     }
+
+    if (form.role === "Boshqa" && !form.customRole.trim()) return setErr("Lavozim nomini kiriting");
 
     if (!phoneValid) {
       return setErr("Telefon raqamini to'liq kiriting");
@@ -82,7 +88,11 @@ export default function Employees({ onNavigate }) {
     }
 
     setErr("");
+    setConfirmOpen(true);
+  };
 
+  const addEmployee = async () => {
+    setConfirmOpen(false);
     const initials = form.name
       .trim()
       .split(/\s+/)
@@ -101,13 +111,14 @@ export default function Employees({ onNavigate }) {
             ...prev.map((e) => Number(e.id) || 0)
           ) + 1,
         name: form.name.trim(),
-        role: form.role,
+        role: form.role === "Boshqa" ? form.customRole.trim() : form.role,
         phone: form.phone,
         avatar: initials,
         sales: 0,
         revenue: 0,
         status: form.status,
         lastActive: "Hozir",
+        createdAt: new Date().toISOString(),
         ...credentials,
         permissions: form.permissions,
       },
@@ -120,6 +131,7 @@ export default function Employees({ onNavigate }) {
     setForm({
       name: "",
       role: "Kassir",
+      customRole: "",
       phone: "",
       status: "active",
       login: "",
@@ -429,7 +441,7 @@ export default function Employees({ onNavigate }) {
                     </td>
 
                     <td className="px-5 py-3.5 text-sm" style={{ color: "var(--text-primary)", whiteSpace: "nowrap" }}>
-                      {tx(e.monthlySalary == null ? "Tayinlanmagan" : Number(e.monthlySalary).toLocaleString("uz-UZ") + " so'm")}
+                      {e.monthlySalary == null ? tx("Tayinlanmagan") : formatCurrency(e.monthlySalary)}
                     </td>
 
                     <td
@@ -451,13 +463,7 @@ export default function Employees({ onNavigate }) {
                           "var(--text-primary)",
                       }}
                     >
-                      {tx(e.revenue > 0
-                        ? (
-                            e.revenue /
-                            1000000
-                          ).toFixed(1) +
-                          " mln so'm"
-                        : "—")}
+                      {e.revenue > 0 ? formatCurrency(e.revenue) : "—"}
                     </td>
 
                     <td className="px-5 py-3.5">
@@ -534,7 +540,7 @@ export default function Employees({ onNavigate }) {
 
       {/* ADD EMPLOYEE MODAL */}
       <Modal contentOnly
-        open={open}
+        open={open && !confirmOpen}
         onClose={() => {
           setOpen(false);
           setErr("");
@@ -650,6 +656,7 @@ export default function Employees({ onNavigate }) {
                 );
               })}
             </div>
+            {form.role === "Boshqa" && <input className="input-base mt-3" value={form.customRole} onChange={(e) => setForm({ ...form, customRole: cleanRole(e.target.value) })} placeholder={tx("Lavozim nomini yozing")} maxLength={40} />}
           </Field>
 
           {/* STATUS */}
@@ -752,6 +759,15 @@ export default function Employees({ onNavigate }) {
               <Plus size={15} />{tx("Qo'shish")}</button>
           </div>
 
+        </div>
+      </Modal>
+      <Modal contentOnly open={confirmOpen} onClose={() => setConfirmOpen(false)} title={tx("Xodimni kiritish") } subtitle={tx("Kiritilgan ma'lumotlar to'g'riligini tasdiqlang")} icon={UserCog} width={420}>
+        <div className="space-y-4">
+          <p className="text-sm" style={{ color: "var(--text-secondary)" }}>{tx("Xodim kiritilsinmi?")} <strong>{form.name.trim()}</strong></p>
+          <div className="flex justify-end gap-2">
+            <button type="button" className="btn-ghost" onClick={() => setConfirmOpen(false)}>{tx("Yo'q, qaytish")}</button>
+            <button type="button" className="btn-primary" onClick={addEmployee}><Plus size={15}/>{tx("Ha, kiritish")}</button>
+          </div>
         </div>
       </Modal>
     </div>

@@ -295,6 +295,64 @@
 .h-12 {
   height: calc(var(--spacing) * 12);
 }
+
+@media (max-width: 480px) {
+  .pd-detail-layout {
+    grid-template-columns: minmax(0, 1fr) !important;
+    gap: 12px !important;
+  }
+
+  .pd-product-main-card {
+    padding: 16px !important;
+  }
+
+  .pd-product-main-card > .w-16 {
+    width: 48px !important;
+    height: 48px !important;
+    margin-bottom: 12px !important;
+  }
+
+  .pd-product-main-card > .w-16 svg {
+    width: 24px;
+    height: 24px;
+  }
+
+  .pd-product-main-card > .w-full.mt-5 {
+    margin-top: 12px !important;
+  }
+
+  .pd-product-main-card .space-y-3 > :not(:last-child) {
+    margin-block-end: 8px;
+  }
+
+  .pd-product-main-card .space-y-3 > div:not(.pt-1) {
+    padding: 9px !important;
+  }
+
+  .pd-product-main-card .flex.gap-2.pt-1 button {
+    min-height: 36px !important;
+    padding: 0 8px !important;
+  }
+
+  .pd-product-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 10px !important;
+  }
+
+  .pd-product-kpis > .card {
+    padding: 12px !important;
+  }
+
+  .pd-product-kpis > .card > div:first-child {
+    padding: 8px !important;
+    margin-bottom: 8px !important;
+  }
+
+  .pd-product-kpis .pd-sales-trend {
+    grid-column: span 2;
+    padding: 12px !important;
+  }
+}
 /* =====================================================
    PRODUCT DETAIL — BARCHA ICONLAR BIR XIL
    ===================================================== */
@@ -398,4 +456,55 @@
 .pd-sales-trend .recharts-surface:focus,
 .pd-sales-trend .recharts-surface:focus-visible {
   outline: none;
+}
+
+@media (max-width: 480px) {
+  .pd-inventory-stats {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    gap: 6px !important;
+  }
+
+  .pd-inventory-stats > div {
+    min-width: 0;
+    padding: 9px !important;
+    border-radius: 14px !important;
+  }
+
+  .pd-inventory-stats > div .text-2xl {
+    font-size: 1rem !important;
+    line-height: 1.15;
+    overflow-wrap: anywhere;
+  }
+
+  .pd-inventory-stats > div .text-xs {
+    display: block;
+    font-size: 0.58rem !important;
+    line-height: 1.2;
+    overflow-wrap: anywhere;
+  }
+}
+
+@media (max-width: 480px) {
+  .pd-sales-stats {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    gap: 6px !important;
+  }
+
+  .pd-sales-stats > div {
+    min-width: 0;
+    padding: 9px !important;
+  }
+
+  .pd-sales-stats small {
+    display: block;
+    font-size: 0.58rem;
+    line-height: 1.2;
+    overflow-wrap: anywhere;
+  }
+
+  .pd-sales-stats b {
+    font-size: 0.8rem !important;
+    line-height: 1.2;
+    overflow-wrap: anywhere;
+  }
 }

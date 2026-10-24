@@ -1,3 +1,4 @@
+import "./ustolarProfile.css";
 import { styles } from './ustolarStyles';
 import { translateText as tx } from "../locales/translateText";
 import { useLanguage as useUILanguage } from "../context/LanguageContext";
@@ -11,16 +12,16 @@ import {
   Wallet,
   Edit3,
   Trash2,
-  Star,
   Award,
-  Sparkles,
   ShieldCheck,
   X,
   CheckCircle,
   Gift,
   AlertTriangle,
+  UserRound,
 } from "lucide-react";
 import { useTheme } from "../context/ThemeContext";
+import { formatCurrency, moneyInputValue, toBaseMoney } from "../data/currency";
 
 const USTALAR_STORAGE_KEY = "crm_ustalar";
 
@@ -33,7 +34,7 @@ const readUstalar = () => {
   }
 };
 
-export default function Ustolar() {
+export default function Ustolar({ profileUsta, setProfileUsta }) {
   useUILanguage();
   const { dark } = useTheme();
   const modalRoot = document.getElementById("main-modal-root");
@@ -242,18 +243,9 @@ export default function Ustolar() {
     }
 
     if (editingUsta) {
-      setUstolar(
-        ustolar.map((u) =>
-          u.id === editingUsta.id
-            ? {
-                ...formData,
-                id: u.id,
-                completedWorks: u.completedWorks,
-                rating: u.rating,
-              }
-            : u
-        )
-      );
+      const updatedUsta = { ...formData, id: editingUsta.id, completedWorks: editingUsta.completedWorks, rating: editingUsta.rating };
+      setUstolar(ustolar.map((u) => u.id === editingUsta.id ? updatedUsta : u));
+      if (profileUsta?.id === updatedUsta.id) setProfileUsta(updatedUsta);
 
       showToast(
         "Usta ma’lumotlari muvaffaqiyatli yangilandi!"
@@ -291,6 +283,7 @@ export default function Ustolar() {
           (u) => u.id !== selectedUsta.id
         )
       );
+      if (profileUsta?.id === selectedUsta.id) setProfileUsta(null);
 
       showToast(
         "Usta ro‘yxatdan o‘chirildi!",
@@ -325,22 +318,14 @@ export default function Ustolar() {
       return;
     }
 
-    setUstolar(
-      ustolar.map((u) =>
-        u.id === selectedUsta.id
-          ? {
-              ...u,
-              balance:
-                Number(u.balance) + amount,
-            }
-          : u
-      )
-    );
+    const updatedUsta = { ...selectedUsta, balance: Number(selectedUsta.balance) + amount };
+    setUstolar(ustolar.map((u) => u.id === selectedUsta.id ? updatedUsta : u));
+    if (profileUsta?.id === updatedUsta.id) setProfileUsta(updatedUsta);
 
     setIsBonusModalOpen(false);
 
     showToast(
-      `${selectedUsta.name}ga ${amount.toLocaleString()} so‘m bonus qo‘shildi!`
+      `${selectedUsta.name}ga ${formatCurrency(amount)} bonus qo‘shildi!`
     );
   };
 
@@ -372,34 +357,41 @@ export default function Ustolar() {
         <span>{tx(toast.message)}</span>
       </div>
 
-      <div style={styles.container}>
+      <div style={profileUsta ? { ...styles.container, maxWidth: "none", padding: 0 } : styles.container}>
+        {profileUsta && <div className="space-y-5">
+          <header><h1 className="font-display font-bold text-2xl">{tx("Usta profili")}</h1><p className="text-sm" style={{ color: colors.muted }}>{tx("Usta ma'lumotlari va hisob-kitobi")}</p></header>
+          <div className="usta-profile-layout">
+            <aside className="space-y-4">
+              <section className="card p-5 text-center">
+                <div className="usta-profile-avatar">{profileUsta.name.charAt(0).toUpperCase()}</div>
+                <h2 className="font-display font-bold text-lg">{profileUsta.name}</h2>
+                <span className="inline-flex mt-2 px-3 py-1 rounded-full text-xs font-semibold" style={{ color: profileUsta.status === "active" ? "var(--brand)" : "var(--danger)", background: profileUsta.status === "active" ? "var(--brand-light)" : "var(--danger-light)" }}>{tx(profileUsta.status === "active" ? "Faol" : "Nofaol")}</span>
+                <div className="usta-profile-contact"><Phone size={16}/><span>{profileUsta.phone}</span></div>
+                <div className="usta-profile-contact"><Award size={16}/><span>{tx(profileUsta.specialty || "Mutaxassislik yo‘q")}</span></div>
+                <div className="usta-profile-actions">
+                  <button className="btn-primary" style={{ background: "var(--success)" }} onClick={() => handleOpenBonusModal(profileUsta)}><Gift size={15}/>{tx("Bonus qo‘shish")}</button>
+                  <button className="btn-ghost" onClick={() => handleOpenModal(profileUsta)}><Edit3 size={15}/>{tx("Tahrirlash")}</button>
+                </div>
+              </section>
+              <section className="card p-4 usta-profile-summary">
+                {[[Wrench, "Bajarilgan ishlar", (profileUsta.completedWorks || 0) + " ta"], [Wallet, "Joriy balans", formatCurrency(profileUsta.balance)], [Award, "Xizmat foizi", profileUsta.percentage + "%"]].map(([Icon, label, value]) => <div key={label}><span className="usta-profile-icon"><Icon size={16}/></span><div><small>{tx(label)}</small><strong>{tx(value)}</strong></div></div>)}
+              </section>
+            </aside>
+            <section className="card usta-profile-panel">
+              <div className="usta-profile-panel-header"><span>{tx("Usta ma'lumotlari")}</span></div>
+              <dl className="usta-profile-info">
+                {[["To'liq ism", profileUsta.name], ["Telefon", profileUsta.phone], ["Mutaxassislik", profileUsta.specialty || "—"], ["Xizmat foizi", profileUsta.percentage + "%"], ["Reyting", profileUsta.rating || "5.0"], ["Holat", profileUsta.status === "active" ? "Faol" : "Nofaol"]].map(([label, value]) => <div key={label}><dt>{tx(label)}</dt><dd>{tx(value)}</dd></div>)}
+              </dl>
+            </section>
+          </div>
+        </div>}
+        <div style={{ display: profileUsta ? "none" : undefined }}>
 
         {/* ======================================================
             BANNER
         ====================================================== */}
 
-        <div
-          className="ustolar-banner"
-          style={styles.banner}
-        >
-          <div style={styles.bannerContent}>
-            <div style={styles.bannerBadge}>
-              <Sparkles size={12} />{tx("Mutaxassislar boshqaruvi")}</div>
-
-            <h1 style={styles.bannerTitle}>{tx("Ustalar jamoasi")}</h1>
-
-            <p style={styles.bannerDesc}>{tx("Balans va xizmat foiz stavkalarini qulay nazorat qiling.")}</p>
-          </div>
-
-          <button
-            style={styles.bannerBtn}
-            onClick={() => handleOpenModal()}
-          >
-            <Plus size={16} />
-            <span>{tx("Usta qo‘shish")}</span>
-          </button>
-        </div>
-
+        <div className="flex items-center justify-between gap-4"><div><h1 className="font-display font-bold text-2xl">{tx("Ustalar")}</h1><p className="text-sm mt-0.5" style={{ color: colors.muted }}>{tx("Xizmat ko'rsatuvchi ustalar va ularning hisoblari")}</p></div><button className="btn-primary usta-add-button" onClick={() => handleOpenModal()}><UserRound size={15}/><Plus size={13}/>{tx("Usta qo‘shish")}</button></div>
         {/* ======================================================
             STATS
         ====================================================== */}
@@ -509,14 +501,7 @@ export default function Ustolar() {
                   fontSize: "15px",
                 }}
               >
-                {tx(ustolar
-                  .reduce(
-                    (acc, u) =>
-                      acc +
-                      Number(u.balance),
-                    0
-                  )
-                  .toLocaleString())}{" "}
+                {formatCurrency(ustolar.reduce((acc, u) => acc + Number(u.balance || 0), 0))}{" "}
                 <span
                   style={{
                     fontSize: "10px",
@@ -646,302 +631,15 @@ export default function Ustolar() {
             CARDS
         ====================================================== */}
 
-        <div
-          style={styles.grid}
-          data-ustolar-grid="true"
-        >
-          {filteredUstolar.length > 0 ? (
-            filteredUstolar.map((usta) => (
-              <div
-                key={usta.id}
-                style={{
-                  ...styles.card,
-                  background: colors.card,
-                  borderColor: colors.border,
-                }}
-              >
-                {/* CARD HEADER */}
-
-                <div
-                  style={{
-                    ...styles.cardHeader,
-                    background: dark
-                      ? "linear-gradient(135deg, #1f2937 0%, #111827 100%)"
-                      : "linear-gradient(135deg, #eef2ff 0%, #f8fafc 100%)",
-                    borderColor: colors.border,
-                  }}
-                >
-                  <div
-                    style={{
-                      ...styles.avatar,
-                      background: dark
-                        ? "#374151"
-                        : "#e0e7ff",
-                      color: dark
-                        ? "#f8fafc"
-                        : "#4f46e5",
-                      borderColor:
-                        colors.card,
-                    }}
-                  >
-                    {tx(usta.name.charAt(0))}
-                  </div>
-
-                  <div style={styles.ratingBadge}>
-                    <Star
-                      size={10}
-                      style={{
-                        fill: "#fbbf24",
-                        color: "#fbbf24",
-                      }}
-                    />
-
-                    <span>
-                      {tx(usta.rating || "5.0")}
-                    </span>
-                  </div>
-
-                  <div>
-                    {usta.status ===
-                    "active" ? (
-                      <span
-                        style={
-                          styles.badgeActive
-                        }
-                      >{tx("Faol")}</span>
-                    ) : (
-                      <span
-                        style={
-                          styles.badgeInactive
-                        }
-                      >{tx("Nofaol")}</span>
-                    )}
-                  </div>
-                </div>
-
-                {/* CARD BODY */}
-
-                <div style={styles.cardBody}>
-                  <div>
-                    <h3
-                      style={{
-                        ...styles.ustaName,
-                        color: colors.text,
-                      }}
-                    >
-                      {usta.name}
-                    </h3>
-
-                    <p
-                      style={
-                        styles.ustaSpecialty
-                      }
-                    >
-                      <Award size={12} />
-                      {tx(usta.specialty ||
-                        "Mutaxassislik yo‘q")}
-                    </p>
-
-                    <p
-                      style={{
-                        ...styles.ustaPhone,
-                        color: colors.muted,
-                      }}
-                    >
-                      <Phone size={11} />
-                      {usta.phone}
-                    </p>
-                  </div>
-
-                  {/* METRICS */}
-
-                  <div
-                    style={{
-                      ...styles.metricsGrid,
-                      background:
-                        colors.cardSecondary,
-                      borderColor:
-                        colors.border,
-                    }}
-                  >
-                    <div
-                      style={
-                        styles.metricItem
-                      }
-                    >
-                      <span
-                        style={{
-                          ...styles.metricTitle,
-                          color:
-                            colors.mutedDark,
-                        }}
-                      >{tx("Foiz")}</span>
-
-                      <strong
-                        style={
-                          styles.metricValue
-                        }
-                      >
-                        {tx(usta.percentage)}%
-                      </strong>
-                    </div>
-
-                    <div
-                      style={
-                        styles.metricItem
-                      }
-                    >
-                      <span
-                        style={{
-                          ...styles.metricTitle,
-                          color:
-                            colors.mutedDark,
-                        }}
-                      >{tx("Ishlar")}</span>
-
-                      <strong
-                        style={{
-                          ...styles.metricValue,
-                          color: colors.text,
-                        }}
-                      >
-                        {tx(usta.completedWorks)}{tx(" ta")}</strong>
-                    </div>
-                  </div>
-
-                  {/* FOOTER */}
-
-                  <div
-                    style={{
-                      ...styles.cardFooter,
-                      borderColor:
-                        colors.border,
-                    }}
-                  >
-                    <div>
-                      <span
-                        style={{
-                          ...styles.metricTitle,
-                          color:
-                            colors.mutedDark,
-                        }}
-                      >{tx("Balans")}</span>
-
-                      <strong
-                        style={{
-                          ...styles.metricValue,
-                          fontSize: "13px",
-                          color:
-                            usta.balance < 0
-                              ? "#f87171"
-                              : colors.text,
-                        }}
-                      >
-                        {tx(Number(
-                          usta.balance
-                        ).toLocaleString())}{" "}{tx("so‘m")}</strong>
-                    </div>
-
-                    <div
-                      style={
-                        styles.actionBtns
-                      }
-                    >
-                      {/* BONUS */}
-
-                      <button
-                        style={{
-                          ...styles.iconBtn,
-                          color: "#c084fc",
-                          borderColor:
-                            "rgba(168, 85, 247, 0.3)",
-                          background:
-                            "rgba(168, 85, 247, 0.1)",
-                        }}
-                        onClick={() =>
-                          handleOpenBonusModal(
-                            usta
-                          )
-                        }
-                        title={tx("Bonus qo‘shish")}
-                      >
-                        <Gift size={14} />
-                      </button>
-
-                      {/* EDIT */}
-
-                      <button
-                        style={{
-                          ...styles.iconBtn,
-                          color: dark
-                            ? "#94a3b8"
-                            : "#475569",
-                          borderColor:
-                            colors.borderStrong,
-                          background:
-                            colors.cardSecondary,
-                        }}
-                        onClick={() =>
-                          handleOpenModal(
-                            usta
-                          )
-                        }
-                        title={tx("Tahrirlash")}
-                      >
-                        <Edit3 size={14} />
-                      </button>
-
-                      {/* DELETE */}
-
-                      <button
-                        style={{
-                          ...styles.iconBtn,
-                          color: "#f87171",
-                          borderColor:
-                            "rgba(248, 113, 113, 0.3)",
-                          background:
-                            "rgba(248, 113, 113, 0.1)",
-                        }}
-                        onClick={() =>
-                          handleOpenDeleteModal(
-                            usta
-                          )
-                        }
-                        title={tx("O‘chirish")}
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ))
-          ) : (
-            <div
-              style={{
-                ...styles.emptyState,
-                background: colors.card,
-                borderColor: colors.border,
-              }}
-            >
-              <Wrench
-                size={32}
-                style={{
-                  color: colors.mutedDark,
-                  marginBottom: "6px",
-                }}
-              />
-
-              <p
-                style={{
-                  color: colors.muted,
-                  fontSize: "13px",
-                  fontWeight: 500,
-                  margin: 0,
-                }}
-              >{tx("Hech qanday usta topilmadi.")}</p>
-            </div>
-          )}
+<div className="usta-list-table">
+          <div className="usta-list-header"><span>{tx("Usta")}</span><span>{tx("Telefon")}</span><span>{tx("Ishlar")}</span><span>{tx("Foiz")}</span><span>{tx("Balans")}</span><span>{tx("Holat")}</span><span>{tx("Amallar")}</span></div>
+          {filteredUstolar.length ? filteredUstolar.map((usta) => <div key={usta.id} role="button" tabIndex={0} onClick={() => setProfileUsta(usta)} onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); setProfileUsta(usta); } }} className="usta-list-row" style={{ color: colors.text }}>
+            <div className="usta-list-person"><span>{usta.name.charAt(0).toUpperCase()}</span><div><strong>{usta.name}</strong><small>{tx(usta.specialty || "Mutaxassislik yo‘q")}</small></div></div>
+            <span className="usta-list-phone">{usta.phone}</span><strong>{usta.completedWorks || 0} {tx("ta")}</strong><strong>{usta.percentage}%</strong><strong>{formatCurrency(usta.balance)}</strong>
+            <span className="usta-list-status" style={{ color: usta.status === "active" ? "var(--success)" : "var(--danger)", background: usta.status === "active" ? "var(--success-light)" : "var(--danger-light)" }}>{tx(usta.status === "active" ? "Faol" : "Nofaol")}</span>
+            <div className="usta-list-actions" onClick={(e) => e.stopPropagation()}><button type="button" className="btn-ghost p-2" title={tx("Bonus qo‘shish")} onClick={() => handleOpenBonusModal(usta)}><Gift size={15}/></button><button type="button" className="btn-ghost p-2" title={tx("Tahrirlash")} onClick={() => handleOpenModal(usta)}><Edit3 size={15}/></button><button type="button" className="btn-ghost p-2" style={{ color: "var(--danger)" }} title={tx("O‘chirish")} onClick={() => handleOpenDeleteModal(usta)}><Trash2 size={15}/></button></div>
+          </div>) : <div className="card p-10 text-center text-sm" style={{ color: colors.muted }}>{tx("Hech qanday usta topilmadi.")}</div>}
+        </div>
         </div>
       </div>
 
@@ -1150,16 +848,12 @@ export default function Ustolar() {
 
                   <input
                     type="number"
-                    value={
-                      formData.balance
-                    }
+                    value={moneyInputValue(formData.balance, false)}
                     onChange={(e) =>
                       setFormData({
                         ...formData,
                         balance:
-                          Number(
-                            e.target.value
-                          ),
+                          toBaseMoney(e.target.value),
                       })
                     }
                     style={{
@@ -1329,10 +1023,10 @@ export default function Ustolar() {
                   min="1"
                   required
                   placeholder={tx("Masalan: 100000")}
-                  value={bonusAmount}
+                  value={moneyInputValue(bonusAmount, false)}
                   onChange={(e) =>
                     setBonusAmount(
-                      e.target.value
+                      String(toBaseMoney(e.target.value))
                     )
                   }
                   style={{

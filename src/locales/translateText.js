@@ -1,28 +1,44 @@
 import catalog from "./uiText.json";
+import translations from "./translations";
+import { formatCurrency, getCurrencySettings, currencyLabel } from "../data/currency";
+import { getTextLanguage } from "./languageState";
 
 // Only presentation text is translated. Stored values, IDs and form values stay canonical.
 const normalize = value => value.replace(/[‘’ʻʼ`]/g, "'").replace(/\s+/g, " ").trim();
-let currentLanguage = "uz";
-export function setTextLanguage(language) { currentLanguage = language === "ru" ? "ru" : "uz"; }
-export function getTextLanguage() { return currentLanguage; }
+const sharedCatalog = Object.entries(translations.uz || {}).flatMap(([key, source]) => {
+  const translated = translations.ru?.[key];
+  return typeof source === "string" && typeof translated === "string" ? [[source, translated]] : [];
+});
+const normalizedCatalog = new Map([...sharedCatalog, ...Object.entries(catalog)].map(([source, translated]) => [normalize(source), translated]));
+export { getTextLanguage, setTextLanguage } from "./languageState";
 const uzLabels = { Dashboard: "Bosh sahifa", "AI Chat": "AI suhbat", "CRM System": "CRM tizimi", "Business Management Platform": "Biznesni boshqarish platformasi", Export: "Eksport", Edit: "Tahrirlash", "NETWORK ERROR": "TARMOQ XATOSI", Status: "Holat", Email: "Elektron pochta", Manager: "Menejer", Demo: "Sinov", Jan: "Yan", Feb: "Fev", Jun: "Iyun", Jul: "Iyul", Aug: "Avg", Sep: "Sen", Sept: "Sen", Oct: "Okt", Nov: "Noy", Dec: "Dek" };
 const escapeRegex = text => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const templatePart = text => escapeRegex(text).replace(/'/g, "['‘’ʻʼ`]").replace(/ /g, "\\s+");
-const templates = Object.entries(catalog).filter(([source]) => /\{\d+\}/.test(source)).sort(([a], [b]) => b.replace(/\{\d+\}/g, "").length - a.replace(/\{\d+\}/g, "").length).map(([source, target]) => ({
+const templates = [...normalizedCatalog].filter(([source]) => /\{\d+\}/.test(source)).sort(([a], [b]) => b.replace(/\{\d+\}/g, "").length - a.replace(/\{\d+\}/g, "").length).map(([source, target]) => ({
   regex: new RegExp("^" + source.split(/\{\d+\}/).map(templatePart).join("([\\s\\S]+?)") + "$"), target, source,
 }));
 
-export function translateText(value, language = currentLanguage) {
+export function translateText(value, language = getTextLanguage()) {
   if (Array.isArray(value)) return value.map(item => translateText(item, language));
   if (typeof value !== "string" || !value.trim()) return value;
   const key = normalize(value);
   const prefix = value.match(/^\s*/)[0], suffix = value.match(/\s*$/)[0];
+  if (key.toLowerCase() === "so'm" && getCurrencySettings().code === "USD") return prefix + currencyLabel() + suffix;
+  const money = key.match(/^(-?)([\d\s,.]+?)(?:\s+(mln|ming))?\s+so'm$/i);
+  if (money && getCurrencySettings().code === "USD") {
+    const raw = money[2].replace(/[\s,]/g, "");
+    const multiplier = money[3]?.toLowerCase() === "mln" ? 1_000_000 : money[3]?.toLowerCase() === "ming" ? 1_000 : 1;
+    return prefix + formatCurrency(Number(raw) * multiplier * (money[1] ? -1 : 1)) + suffix;
+  }
+
   if (language !== "ru") {
     if (uzLabels[key]) return prefix + uzLabels[key] + suffix;
     const uzDate = key.match(/^((?:Ro'yxatdan: |So'nggi kirish: )?\d{1,2} )(Jan|Feb|Jun|Jul|Aug|Sept|Sep|Oct|Nov|Dec)(.*)$/);
     return uzDate ? prefix + uzDate[1] + uzLabels[uzDate[2]] + uzDate[3] + suffix : value;
   }
-  if (catalog[key]) return prefix + catalog[key] + suffix;
+  const reasons = key.split(/;\s*/);
+  if (reasons.length > 1 && reasons.every(reason => normalizedCatalog.has(reason))) return prefix + reasons.map(reason => normalizedCatalog.get(reason)).join("; ") + suffix;
+  if (normalizedCatalog.has(key)) return prefix + normalizedCatalog.get(key) + suffix;
   for (const { regex, target, source } of templates) {
     const match = value.trim().match(regex);
     if (match) return prefix + target.replace(/\{(\d+)\}/g, (_, index) => {
@@ -45,7 +61,6 @@ export function translateText(value, language = currentLanguage) {
     return prefix + `${date[1]} ${months[date[2]]}${date[3]}` + suffix;
   }
   const period = key.match(/^(Yanvar|Fevral|Mart|Aprel|May|Iyun|Iyul|Avgust|Sentabr|Sentyabr|Oktabr|Noyabr|Dekabr) (\d{4})$/);
-  if (period) return prefix + catalog[period[1]] + " " + period[2] + suffix;
+  if (period) return prefix + (normalizedCatalog.get(period[1]) || period[1]) + " " + period[2] + suffix;
   return value;
 }
-
