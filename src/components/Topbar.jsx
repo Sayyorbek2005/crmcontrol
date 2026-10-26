@@ -317,8 +317,8 @@ export default function Topbar({ onNavigate, onOpen, user, profile }) {
             }}
           >
             <span className="quick-sale-icons" aria-hidden="true">
-              <Plus size={13} strokeWidth={3} />
               <ShoppingCart size={17} strokeWidth={2.2} />
+              <Plus size={13} strokeWidth={3} />
             </span>
             <span className="quick-sale-text">{tx(t("topbar.newSale", "Yangi sotuv"))}</span>
           </button>

@@ -198,8 +198,8 @@ export default function POS({ cartWindowOpen = false, onCartWindowChange, draftK
         }));
       }
     } catch { /* The sale can still be completed if browser storage is full. */ }
-  }, [cart, globalDiscount, customerName, customerPhone, deliveryAddress,
-    addresses, selectedAddressId, addressConfirmed, paymentComplete, draftKey, orderMode]);
+  },[cart, globalDiscount, customerName, customerPhone, deliveryAddress,
+    addresses, selectedAddressId, addressConfirmed, paymentComplete, draftKey, orderMode, activeReservationOrderId]);
 
   useEffect(() => { onDraftChange?.({ customerName, customerPhone, count: cart.length }); }, [customerName, customerPhone, cart.length, onDraftChange]);
 

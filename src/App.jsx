@@ -205,6 +205,12 @@ function renderPage(page, onNavigate, onBack, user, onProfileSaved, posCartProps
 // ── Shell ────────────────────────────────────────────
 const detailPagePrefixes = ["customer-", "product-", "supplier-", "employee-", "debt-"];
 const browserRouteKey = "__uyMarketCrmRoute";
+const sectionStartPages = { sales: "sales-all", products: "products-all", customers: "customers-all", finance: "finance-revenue" };
+
+function getFirstAllowedPage(user) {
+  const section = ACCESS_SECTIONS.find((entry) => canAccess(user, entry.id));
+  return section ? sectionStartPages[section.id] || section.id : "help";
+}
 
 function routeFromBrowserState(state) {
   const savedRoute = state?.[browserRouteKey];
@@ -221,15 +227,10 @@ function Shell({ onLogout, user, initialPage }) {
   useUILanguage();
   const [, setCurrencyRevision] = useState(0);
   const [profile, setProfile] = useState(() => readProfile(user));
-  const sectionStartPages = { sales: "sales-all", products: "products-all", customers: "customers-all", finance: "finance-revenue" };
-  const firstAllowed = () => {
-    const section = ACCESS_SECTIONS.find((entry) => canAccess(user, entry.id));
-    return section ? sectionStartPages[section.id] || section.id : "help";
-  };
   const [route, setRoute] = useState(
     () => {
       const saved = routeFromBrowserState(window.history.state);
-      return saved && canAccess(user, saved.page) ? saved : { page: initialPage || firstAllowed(), history: [] };
+      return saved && canAccess(user, saved.page) ? saved : { page: initialPage || getFirstAllowedPage(user), history: [] };
     }
   );
   const routeRef = useRef(route);
@@ -262,7 +263,7 @@ function Shell({ onLogout, user, initialPage }) {
     const handleBrowserNavigation = (event) => {
       const browserRoute = routeFromBrowserState(event.state);
       const nextRoute = browserRoute && canAccess(user, browserRoute.page)
-        ? browserRoute : { page: firstAllowed(), history: [] };
+        ? browserRoute : { page: getFirstAllowedPage(user), history: [] };
       // Tarix qisqarsa — orqaga qaytish, aks holda oldinga (brauzerning "oldinga" tugmasi).
       const direction = nextRoute.history.length < routeRef.current.history.length ? "back" : "forward";
       routeRef.current = nextRoute;
@@ -276,7 +277,7 @@ function Shell({ onLogout, user, initialPage }) {
 
   useEffect(() => {
     if (!canAccess(user, routeRef.current.page)) {
-      const allowed = { page: firstAllowed(), history: [] };
+      const allowed = { page: getFirstAllowedPage(user), history: [] };
       routeRef.current = allowed;
       setRoute(allowed);
       window.history.replaceState({ ...window.history.state, [browserRouteKey]: allowed }, "");

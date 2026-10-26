@@ -366,7 +366,7 @@
 
 .header-clock-seconds { font-size: 11px; font-weight: 500; margin-left: 2px; opacity: .75; }
 
-/* "Yangi sotuv" tugmasi: "+" va savatcha belgisi yonma-yon. */
+/* "Yangi sotuv" tugmasi: savatcha va undan keyin "+" belgisi. */
 .quick-sale-icons {
   display: inline-flex;
   align-items: center;

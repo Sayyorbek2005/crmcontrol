@@ -803,33 +803,6 @@ export default function Products({ onNavigate }) {
             ))}
           </span>
 
-          <div className="flex items-center gap-1">
-
-            {[1, 2, 3].map(
-              (page) => (
-                <button
-                  key={page}
-                  type="button"
-                  className="w-8 h-8 rounded-lg text-xs font-medium transition-colors cursor-pointer"
-                  style={{
-                    background:
-                      page === 1
-                        ? "var(--brand)"
-                        : "transparent",
-
-                    color:
-                      page === 1
-                        ? "white"
-                        : "var(--text-muted)",
-                  }}
-                >
-                  {tx(page)}
-                </button>
-              )
-            )}
-
-          </div>
-
         </div>
 
       </div>
