@@ -7,11 +7,7 @@ import { prefersReducedMotion } from "../utils/motion";
 // Yopilish animatsiyasi davomiyligi (src/styles/motion.css dagi m-alert-out bilan mos).
 const CONFIRM_EXIT_MS = 160;
 
-<<<<<<< HEAD
 export default function ConfirmDialog({ open, title, message, confirmLabel = "Ha", confirmDanger = false, onConfirm, onCancel }) {
-=======
-export default function ConfirmDialog({ open, title, message, confirmLabel = "Ha", onConfirm, onCancel }) {
->>>>>>> ec0b17d (Finish All Code 17.10.2026)
   useUILanguage();
   const cancelRef = useRef(null);
   // Yopilganda matn oxirgi holatda qoladi, oyna esa teskari animatsiya bilan yo'qoladi.
@@ -56,11 +52,7 @@ export default function ConfirmDialog({ open, title, message, confirmLabel = "Ha
         <p id="confirm-dialog-message" className="text-sm mt-2" style={{ color: "var(--text-muted)" }}>{tx(view.message)}</p>
         <div className="flex justify-end gap-3 mt-6">
           <button ref={cancelRef} type="button" onClick={onCancel} disabled={closing} className="btn-ghost">{tx("Yo‘q, bekor qilish")}</button>
-<<<<<<< HEAD
           <button type="button" onClick={onConfirm} disabled={closing} className={`btn-primary${confirmDanger ? " confirm-dialog-danger" : ""}`}>{tx(view.confirmLabel)}</button>
-=======
-          <button type="button" onClick={onConfirm} disabled={closing} className="btn-primary">{tx(view.confirmLabel)}</button>
->>>>>>> ec0b17d (Finish All Code 17.10.2026)
         </div>
       </div>
     </div>,

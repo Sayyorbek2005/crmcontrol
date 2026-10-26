@@ -145,11 +145,7 @@ function renderPage(page, onNavigate, onBack, user, onProfileSaved, posCartProps
     case "sales-new":
       return <POS key="primary-pos" {...posCartProps} currentUser={user} />;
     case "sales-pos":
-<<<<<<< HEAD
       return <POS key="additional-pos" {...posCartProps} currentUser={user} headingText="Sotuv bo‘limi" workspaceKey="crm_additional_pos_windows_v2" draftKeyPrefix="crm_additional_pos_v2_draft_" migrateLegacyDraft={false} salesStorageKey="crm_additional_pos_sales" customerStorageKey="crm_additional_pos_customers" salesDocumentType="additional-pos" />;
-=======
-      return <POS key="additional-pos" {...posCartProps} currentUser={user} workspaceKey="crm_additional_pos_windows_v2" draftKeyPrefix="crm_additional_pos_v2_draft_" migrateLegacyDraft={false} salesStorageKey="crm_additional_pos_sales" customerStorageKey="crm_additional_pos_customers" salesDocumentType="additional-pos" />;
->>>>>>> ec0b17d (Finish All Code 17.10.2026)
     case "sales-returns":
       return <Returns />;
     case "orders":
@@ -241,11 +237,8 @@ function Shell({ onLogout, user, initialPage }) {
   const [collapsed, setCollapsed] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [posCartOpen, setPosCartOpen] = useState(false);
-<<<<<<< HEAD
   const [additionalPosTransitionLoading, setAdditionalPosTransitionLoading] = useState(false);
   const additionalPosBackTimerRef = useRef(null);
-=======
->>>>>>> ec0b17d (Finish All Code 17.10.2026)
   const [ordersEditorOpen, setOrdersEditorOpen] = useState(false);
   const isPosPage = page === "sales-new" || page === "sales-pos";
   const [profileUsta, setProfileUsta] = useState(null);
@@ -294,7 +287,6 @@ function Shell({ onLogout, user, initialPage }) {
     contentRef.current?.scrollTo({ top: 0, behavior: "smooth" });
     setPosCartOpen(false);
     setProfileUsta(null);
-<<<<<<< HEAD
     setAdditionalPosTransitionLoading(false);
     window.clearTimeout(additionalPosBackTimerRef.current);
   }, [page]);
@@ -316,11 +308,6 @@ function Shell({ onLogout, user, initialPage }) {
     runPageTransition("forward", () => setRoute(nextRoute));
     setIsSidebarOpen(false);
   };
-
-=======
-  }, [page]);
-
->>>>>>> ec0b17d (Finish All Code 17.10.2026)
   const navigate = (nextPage) => {
     if (!nextPage) {
       return;
@@ -335,7 +322,6 @@ function Shell({ onLogout, user, initialPage }) {
 
     const current = routeRef.current;
     if (current.page === nextPage) return;
-<<<<<<< HEAD
     if (nextPage === "sales-pos") {
       if (additionalPosBackTimerRef.current) return;
       setAdditionalPosTransitionLoading(true);
@@ -347,19 +333,6 @@ function Shell({ onLogout, user, initialPage }) {
       return;
     }
     navigateImmediately(nextPage);
-=======
-    const nextRoute = {
-      page: nextPage,
-      history: [...current.history, current.page],
-    };
-    window.history.pushState(
-      { ...window.history.state, [browserRouteKey]: nextRoute },
-      ""
-    );
-    routeRef.current = nextRoute;
-    runPageTransition("forward", () => setRoute(nextRoute));
-    setIsSidebarOpen(false);
->>>>>>> ec0b17d (Finish All Code 17.10.2026)
   };
 
   const goBack = () => {
@@ -376,7 +349,6 @@ function Shell({ onLogout, user, initialPage }) {
       setPosCartOpen(false);
       return;
     }
-<<<<<<< HEAD
     if (page === "sales-pos" && routeRef.current.history.length > 0) {
       if (additionalPosBackTimerRef.current) return;
       setAdditionalPosTransitionLoading(true);
@@ -387,8 +359,6 @@ function Shell({ onLogout, user, initialPage }) {
       }, 1000);
       return;
     }
-=======
->>>>>>> ec0b17d (Finish All Code 17.10.2026)
     goBack();
   };
 
@@ -397,7 +367,6 @@ function Shell({ onLogout, user, initialPage }) {
       className="flex h-full relative"
       style={{ background: "var(--bg)" }}
     >
-<<<<<<< HEAD
       {page !== "sales-pos" && (
         <Sidebar
           user={user}
@@ -412,31 +381,12 @@ function Shell({ onLogout, user, initialPage }) {
           onClose={() => setIsSidebarOpen(false)}
         />
       )}
-=======
-      <Sidebar
-        user={user}
-        profile={profile}
-        active={page}
-        onNavigate={navigate}
-        collapsed={collapsed}
-        onCollapse={setCollapsed}
-        notifCount={unread}
-        isOpen={isSidebarOpen}
-        onOpen={() => setIsSidebarOpen(true)}
-        onClose={() => setIsSidebarOpen(false)}
-      />
->>>>>>> ec0b17d (Finish All Code 17.10.2026)
 
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         <Topbar onNavigate={navigate} notifCount={unread} user={user} profile={profile} />
         <div style={{ position: "relative", display: "flex", flex: "1 1 0%", flexDirection: "column", minHeight: 0, minWidth: 0, isolation: "isolate" }}>
-<<<<<<< HEAD
         <main ref={contentRef} className={`app-main-view flex-1 overflow-y-auto p-6 ${isPosPage ? "app-pos-main" : ""}${page === "ai-chat" ? " ai-chat-shell-scroll" : ""}`} style={page === "sales-pos" ? { paddingLeft: "clamp(12px, 1.2vw, 24px)", paddingRight: "clamp(12px, 1.2vw, 24px)" } : undefined}>
           <div className={isPosPage ? "app-pos-content" : undefined} style={{ maxWidth: page === "sales-pos" ? "none" : 1400, margin: page === "sales-pos" ? 0 : "0 auto", width: "100%" }}>
-=======
-        <main ref={contentRef} className={`app-main-view flex-1 overflow-y-auto p-6 ${isPosPage ? "app-pos-main" : ""}${page === "ai-chat" ? " ai-chat-shell-scroll" : ""}`}>
-          <div className={isPosPage ? "app-pos-content" : undefined} style={{ maxWidth: 1400, margin: "0 auto", width: "100%" }}>
->>>>>>> ec0b17d (Finish All Code 17.10.2026)
 
             {(history.length > 0 || (page === "ustolar" && profileUsta) || (isPosPage && posCartOpen)) && !hasOwnBackButton && !(page === "orders" && ordersEditorOpen) && (
               <button

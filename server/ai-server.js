@@ -17,7 +17,7 @@ async function readBody(req) {
   try { return JSON.parse(Buffer.concat(chunks).toString("utf8")); }
   catch { throw Object.assign(new Error("So'rov formati noto'g'ri."), { status: 400 }); }
 }
-function createServer({ apiKey = process.env.OPENAI_API_KEY, model = process.env.OPENAI_MODEL || "gpt-6git remote -v-sol", fetchImpl = fetch } = {}) {
+function createServer({ apiKey = process.env.OPENAI_API_KEY, model = process.env.OPENAI_MODEL || "gpt-6-sol", fetchImpl = fetch } = {}) {
   const configured = Boolean(apiKey && !apiKey.includes("your-key"));
   let active = 0; let requests = [];
   return http.createServer(async (req, res) => {

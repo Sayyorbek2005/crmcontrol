@@ -63,11 +63,7 @@ const buildNavItems = (t) => [
       },
       {
         id: "sales-pos",
-<<<<<<< HEAD
         label: t("sidebar.sales.pos", "Qo‘shimcha sotuv"),
-=======
-        label: t("sidebar.sales.pos", "Qo‘shimcha sotuv (POS)"),
->>>>>>> ec0b17d (Finish All Code 17.10.2026)
         icon: ShoppingCart,
       },
       {
@@ -871,10 +867,7 @@ export default function Sidebar({
         title={tx("Hisobdan chiqish")}
         message={tx("Haqiqatan ham hisobdan chiqmoqchimisiz?")}
         confirmLabel={tx("Ha, chiqish")}
-<<<<<<< HEAD
         confirmDanger
-=======
->>>>>>> ec0b17d (Finish All Code 17.10.2026)
         onCancel={() => setLogoutConfirmOpen(false)}
         onConfirm={() => { setLogoutConfirmOpen(false); onNavigate("login"); }}
       />

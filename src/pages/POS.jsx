@@ -72,11 +72,7 @@ const readPosCustomerSuggestions = (activeCustomerKey, activeSalesKey, query, se
   if (matches.some((customer) => customer.name.toLocaleLowerCase("uz-UZ") === normalizedQuery && customer.phone && customer.phone === selectedPhone)) return [];
   return matches.sort((a, b) => a.name.localeCompare(b.name, "uz", { sensitivity: "base" })).slice(0, 8);
 };
-<<<<<<< HEAD
 export default function POS({ cartWindowOpen = false, onCartWindowChange, draftKey = POS_DRAFT_KEY, onDraftChange, onBusyChange, onSaveSaleDraft, saveDraftActionRef, hideSaveDraftButton = false, draftOpenedAt, salesStorageKey = "crm_sales", customerStorageKey = "crm_customers", salesDocumentType = "sales", currentUser = null, orderMode = false, headingText, initialOrderDraft = null, reservationOrderId = null, onSaveOrder, saveOrderActionRef, onOrderSaveAvailabilityChange, onOrderSaleComplete }) {
-=======
-export default function POS({ cartWindowOpen = false, onCartWindowChange, draftKey = POS_DRAFT_KEY, onDraftChange, onBusyChange, onSaveSaleDraft, saveDraftActionRef, hideSaveDraftButton = false, draftOpenedAt, salesStorageKey = "crm_sales", customerStorageKey = "crm_customers", salesDocumentType = "sales", currentUser = null, orderMode = false, initialOrderDraft = null, reservationOrderId = null, onSaveOrder, saveOrderActionRef, onOrderSaveAvailabilityChange, onOrderSaleComplete }) {
->>>>>>> ec0b17d (Finish All Code 17.10.2026)
   useUILanguage();
   const companyName = useTenantCompanyName();
   const { t } = useLanguage();
@@ -1288,11 +1284,7 @@ export default function POS({ cartWindowOpen = false, onCartWindowChange, draftK
 
         <div className="pos-header">
           <h1 className="pos-title">
-<<<<<<< HEAD
             {headingText ? tx(headingText) : tx(text(
-=======
-            {tx(text(
->>>>>>> ec0b17d (Finish All Code 17.10.2026)
               "title",
               orderMode ? "Yangi buyurtma" : "Yangi Sotuv"
             ))}
