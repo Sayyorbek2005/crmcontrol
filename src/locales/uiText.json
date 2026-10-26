@@ -1267,9 +1267,13 @@
   "Usta ma'lumotlari": "Данные мастера",
   "Xizmat ko'rsatuvchi ustalar va ularning hisoblari": "Мастера и их счета",
   "Usta": "Мастер",
+<<<<<<< HEAD
   "Qo‘shimcha sotuv": "Дополнительная продажа",
   "Sotuv bo‘limi": "Раздел продаж",
   "Sahifa yuklanmoqda": "Загрузка страницы",
+=======
+  "Qo‘shimcha sotuv (POS)": "Дополнительная продажа (POS)",
+>>>>>>> ec0b17d (Finish All Code 17.10.2026)
   "Qoldiq: {0} dona": "Остаток: {0} шт.",
   "Sotuv hisobotini yuklash": "Скачать отчёт о продажах",
   "Davrni tanlang · Word hujjati": "Выберите период · Документ Word",

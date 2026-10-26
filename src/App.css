@@ -163,6 +163,7 @@
 .debt-highlight { background: var(--danger-light) !important; border: 1px solid var(--danger) !important; }
 .debt-highlight :is(.font-bold, .text-xs, .customers-stat__value, .customers-stat__label, svg) { color: var(--danger) !important; }
 .debt-highlight .customers-stat__icon { background: var(--danger-light) !important; color: var(--danger) !important; }
+<<<<<<< HEAD
 .confirm-dialog-danger,
 .confirm-dialog-danger:hover {
   background: var(--danger) !important;
@@ -208,3 +209,5 @@
 @media (prefers-reduced-motion: reduce) {
   .additional-pos-spinner { animation: none; }
 }
+=======
+>>>>>>> ec0b17d (Finish All Code 17.10.2026)
